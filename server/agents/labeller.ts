@@ -12,11 +12,13 @@ export default defineAgent({
   data: emailSchema,
   intercept: ({ input }) => input.data === undefined ? undefined : matchRule(input.data, useServerEnv().labeller.rules),
   driver: {
-    ask: () => ({
-      label: ask.choice('Which Gmail label fits this email? Choose "none" if no label clearly fits.', {
+    ask: () => {
+      // The annotation keeps `choice` typed as `string`: TypeScript drops the index signature of a spread mixed with a key.
+      const labels: Record<string, string> = {
         ...jevLabels(useServerEnv().labeller.labels),
         none: 'No label clearly fits this email.',
-      }),
-    }),
+      }
+      return { label: ask.choice('Which Gmail label fits this email? Choose "none" if no label clearly fits.', labels) }
+    },
   },
 })
