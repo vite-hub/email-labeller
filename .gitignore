@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.output/
+.nitro/
+.vitehub/
+.wrangler/
+dist/

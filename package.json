@@ -1,0 +1,34 @@
+{
+  "name": "email-labeller",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "db:generate": "vitehub db generate",
+    "db:migrate": "node -e \"require('node:fs').mkdirSync('.vitehub/data/database', { recursive: true })\" && vitehub db migrate",
+    "labels:sync": "node --env-file=.env scripts/sync-labels.mjs",
+    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "advocaat": "^0.0.6",
+    "drizzle-orm": "^0.45.3",
+    "h3": "2.0.1-rc.31",
+    "jose": "^6.2.12",
+    "nitro": "3.0.260903-beta",
+    "valibot": "^1.5.0",
+    "vite": "^8.2.2",
+    "vite-hub": "https://pkg.pr.new/vite-hub/vitehub/vite-hub@016f1ef5a26920cd38ee252626163bf57be4f494"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "drizzle-kit": "^0.31.11",
+    "miniflare": "^4.20260730.0",
+    "typescript": "^6.0.3"
+  }
+}
