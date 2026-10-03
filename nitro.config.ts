@@ -2,6 +2,8 @@ import { defineConfig } from 'nitro'
 
 export default defineConfig({
   preset: 'cloudflare-module',
+  // Pinned: an unpinned date is the build machine's local date, which Cloudflare rejects when it is ahead of UTC.
+  compatibilityDate: '2026-10-01',
   serverDir: 'server',
   cloudflare: {
     wrangler: {
