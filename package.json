@@ -13,6 +13,7 @@
     "db:migrate": "node -e \"require('node:fs').mkdirSync('.vitehub/data/database', { recursive: true })\" && vitehub db migrate",
     "labels:sync": "node --env-file=.env scripts/sync-labels.mjs",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

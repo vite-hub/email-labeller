@@ -15,6 +15,13 @@
       "when": 1790352823713,
       "tag": "0001_ambitious_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791056460301,
+      "tag": "0002_sync_lease",
+      "breakpoints": true
     }
   ]
 }

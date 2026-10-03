@@ -1,21 +1,14 @@
 import { eq, inArray } from 'drizzle-orm'
-import * as v from 'valibot'
 import { useServerEnv } from '#vitehub/env/server'
 import { runAgent } from 'vite-hub/agent'
 import { useDatabase } from 'vite-hub/database/drizzle'
 import labeller from '../agents/labeller'
 import * as gmail from './gmail'
-import { type Email, jevLabels, type RuleDecision } from './labeller'
+import { type Email, jevLabels } from './labeller'
+import { claimSync, releaseSync, requestedSince } from './sync-lease'
 
 const mailboxId = 'me'
 const batchSize = 20
-
-const jevOutputSchema = v.object({
-  label: v.object({
-    choice: v.string(),
-    probabilities: v.record(v.string(), v.number()),
-  }),
-})
 
 export interface Decision {
   messageId: string
@@ -30,27 +23,23 @@ export interface Decision {
   trash: boolean
 }
 
-function isRuleDecision(value: unknown): value is RuleDecision {
-  return typeof value === 'object' && value !== null && 'rule' in value
-}
-
 /** Runs the labeller Agent for one email. */
 export async function decide(email: Email): Promise<Decision> {
   // The prompt names the Console session; the rules and Jev read `data`.
   const [error, output] = await runAgent(labeller, { data: email, prompt: `${email.from}: ${email.subject}` })
   if (error) throw error
-  const base = { messageId: email.id, from: email.from, subject: email.subject }
-  if (isRuleDecision(output)) {
-    const trashEnabled = useServerEnv().labeller.trashEnabled === 'true'
-    return { ...base, source: 'rule', ...output, trash: output.trash && trashEnabled }
-  }
-
-  const { label } = v.parse(jevOutputSchema, output)
+  if (output instanceof Response) throw new Error('The labeller Agent returned an HTTP response')
   const config = useServerEnv().labeller
+  const base = { messageId: email.id, from: email.from, subject: email.subject }
+  if ('rule' in output) return { ...base, source: 'rule', ...output, trash: output.trash && config.trashEnabled }
+
+  // `runAgent` also types a workflow run, which this Agent never starts.
+  if (!('label' in output)) throw new Error('The labeller Agent returned no label decision')
+  const { label } = output
   const probability = label.probabilities[label.choice] ?? 0
   const allowed = Object.hasOwn(jevLabels(config.labels), label.choice)
   const confident = allowed && Number.isFinite(probability) && probability >= 0 && probability <= 1
-    && probability >= Number(config.minConfidence)
+    && probability >= config.minConfidence
   return {
     ...base,
     source: 'jev',
@@ -95,7 +84,7 @@ export interface ProcessOptions {
 export async function processMessages(ids: string[], options: ProcessOptions = {}): Promise<Decision[]> {
   const { db, schema } = useDatabase('default')
   const config = useServerEnv().labeller
-  const dryRun = config.dryRun !== 'false'
+  const dryRun = config.dryRun
   const decided: Decision[] = []
   const labels = await gmail.listLabels()
   const managed = new Map(labels.filter(label => Object.hasOwn(config.labels, label.name)).map(label => [label.name, label.id]))
@@ -158,11 +147,7 @@ export async function recordSyncRequest(): Promise<void> {
 async function syncOnce(): Promise<Decision[]> {
   const { db, schema } = useDatabase('default')
   const [mailbox] = await db.select().from(schema.mailbox).where(eq(schema.mailbox.id, mailboxId))
-  if (!mailbox) {
-    // The first sync starts from now instead of labelling the whole mailbox.
-    await db.insert(schema.mailbox).values({ id: mailboxId, historyId: await gmail.currentHistoryId() })
-    return []
-  }
+  if (!mailbox) return []
   const changes = await gmail.listNewMessageIds(mailbox.historyId)
   if (changes === 'expired') {
     // Gmail keeps about a week of history. Recover recent Inbox mail, then continue from now.
@@ -181,8 +166,9 @@ let running: Promise<Decision[]> | undefined
 let queued = false
 
 /**
- * Processes new Inbox messages since the stored history cursor. Calls during a sync run once more after it, so
- * overlapping Gmail notifications never process the same history concurrently.
+ * Processes new Inbox messages since the stored history cursor. Only one sync runs at a time across Worker isolates.
+ * A sync that cannot claim the mailbox returns no decisions: the running sync checks for push notifications that
+ * arrived while it ran, and syncs again for them. Calls in the same isolate during a sync also make it run again.
  */
 export function sync(): Promise<Decision[]> {
   if (running) {
@@ -190,11 +176,23 @@ export function sync(): Promise<Decision[]> {
     return running
   }
   running = (async () => {
+    const { db } = useDatabase('default')
+    const decisions: Decision[] = []
     try {
-      const decisions = await syncOnce()
-      while (queued) {
+      let again = true
+      while (again) {
         queued = false
-        decisions.push(...await syncOnce())
+        const startedAt = new Date()
+        const lease = await claimSync(db, mailboxId, gmail.currentHistoryId)
+        if (!lease) break
+        try {
+          decisions.push(...await syncOnce())
+        }
+        finally {
+          await releaseSync(db, mailboxId, lease)
+        }
+        // Check after the release: a push that failed to claim recorded its request before this point.
+        again = queued || await requestedSince(db, mailboxId, startedAt)
       }
       return decisions
     }

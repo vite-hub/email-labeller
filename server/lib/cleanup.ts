@@ -22,7 +22,7 @@ function labelQuery(name: string): string {
  */
 export async function cleanup(): Promise<CleanupResult[]> {
   const config = useServerEnv().labeller
-  const trashed = config.cleanupEnabled === 'true' && config.dryRun === 'false'
+  const trashed = config.cleanupEnabled && !config.dryRun
   const results: CleanupResult[] = []
   for (const [rule, { label, olderThan }] of Object.entries(config.cleanup ?? {})) {
     const query = `${labelQuery(label)} older_than:${olderThan}d -is:starred -in:trash`

@@ -1,15 +1,17 @@
 import { defineDatabase } from 'vite-hub/database'
 import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
-/** One row per mailbox: the Gmail history cursor and the push watch expiry. */
-const mailbox = sqliteTable('mailbox', {
+/** One row per mailbox: the Gmail history cursor, the push watch expiry, and the sync lease. */
+export const mailbox = sqliteTable('mailbox', {
   id: text('id').primaryKey(),
   historyId: text('history_id').notNull(),
   watchExpiresAt: integer('watch_expires_at', { mode: 'timestamp_ms' }),
+  /** While set and in the future, one Worker isolate is syncing this mailbox. */
+  syncLeaseUntil: integer('sync_lease_until', { mode: 'timestamp_ms' }),
 })
 
-/** Last authenticated push request. The hourly schedule reconciles it if inline sync fails. */
-const syncRequests = sqliteTable('sync_requests', {
+/** Last authenticated push request. A sync that is running checks it before it stops, and the five-minute schedule reconciles it if inline sync fails. */
+export const syncRequests = sqliteTable('sync_requests', {
   id: text('id').primaryKey(),
   requestedAt: integer('requested_at', { mode: 'timestamp_ms' }).notNull(),
 })

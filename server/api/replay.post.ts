@@ -8,7 +8,7 @@ import { processMessages } from '../lib/sync'
 /** Apply previously recorded dry-run decisions after live mode is enabled. */
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
-  if (useServerEnv().labeller.dryRun !== 'false') {
+  if (useServerEnv().labeller.dryRun) {
     throw createError({ statusCode: 409, message: 'Replay requires live mode' })
   }
   const { db, schema } = useDatabase('default')

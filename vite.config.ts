@@ -23,21 +23,16 @@ export default defineConfig({
         serviceAccount: env({ optional: true, source: env.source('PUBSUB_SERVICE_ACCOUNT') }),
         subscription: env({ optional: true, source: env.source('GMAIL_PUBSUB_SUBSCRIPTION') }),
       },
-      // Cloudflare Access application that signs in to the Console at /_vitehub.
-      access: {
-        teamDomain: env({ optional: true, source: env.source('CF_ACCESS_TEAM_DOMAIN') }),
-        audience: env({ optional: true, source: env.source('CF_ACCESS_AUD') }),
-      },
       labeller: {
         adminToken: env({ optional: true, secret: true, source: env.source('LABELLER_ADMIN_TOKEN') }),
         // Record decisions without changing Gmail. Set LABELLER_DRY_RUN=false to apply them.
-        dryRun: env({ default: 'true', source: env.source('LABELLER_DRY_RUN') }),
+        dryRun: env.boolean({ default: true, source: env.source('LABELLER_DRY_RUN') }),
         // Keep destructive rules disabled until explicitly enabled for future messages.
-        trashEnabled: env({ default: 'false', source: env.source('LABELLER_TRASH_ENABLED') }),
+        trashEnabled: env.boolean({ default: false, source: env.source('LABELLER_TRASH_ENABLED') }),
         // Apply `cleanup` rules from labeller.config.ts once a day.
-        cleanupEnabled: env({ default: 'false', source: env.source('LABELLER_CLEANUP_ENABLED') }),
+        cleanupEnabled: env.boolean({ default: false, source: env.source('LABELLER_CLEANUP_ENABLED') }),
         // Minimum Jev probability to apply a label
-        minConfidence: env({ default: '0.6', source: env.source('LABELLER_MIN_CONFIDENCE') }),
+        minConfidence: env.number({ default: 0.6, source: env.source('LABELLER_MIN_CONFIDENCE') }),
 
         // Labels, rules, and cleanup
         ...labellerConfig,
@@ -47,16 +42,17 @@ export default defineConfig({
   plugins: [
     vitehub({
       preset: 'cloudflare',
-      database: {
-        driver: 'd1',
-        binding: 'DB',
-        databaseName: 'email-labeller',
-        databaseId: 'd82fb542-7741-4213-bd02-5d1936f615df',
-      },
-      // server/middleware/console-auth.ts protects /_vitehub with Cloudflare Access or LABELLER_ADMIN_TOKEN.
+      // Enables Database on the D1 binding `DB`. nitro.config.ts declares that binding for Wrangler.
+      database: { driver: 'd1' },
       // This app has no Channels or hosted chat, so Agents need no durable chat state (no CHAT_STATE Durable Object).
       agent: { providers: { state: { provider: 'memory' } } },
-      console: { exposure: 'host-managed' },
+      // The Console at /_vitehub accepts only the Cloudflare Access application "Email labeller Console".
+      // It reads CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD. Agent sessions are stored in the D1 database.
+      console: {
+        access: 'auth',
+        auth: { provider: 'cloudflare-access' },
+        retention: { maxRecords: 50_000, maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
+      },
       schedule: true,
       workflow: false,
     }),

@@ -7,9 +7,8 @@ export default defineConfig({
     wrangler: {
       account_id: 'ba6e044dfdaaffec3cac45e9feccd237',
       routes: [{ pattern: 'email-labeller.onmax.me', custom_domain: true }],
+      // Only values that differ from the defaults in vite.config.ts, and values without one.
       vars: {
-        EXECUTOR_URL: 'https://executor.onmax.me',
-        EXECUTOR_GMAIL_CONNECTION: 'personalGmail',
         GMAIL_PUBSUB_TOPIC: 'projects/maxios-gog-mg-20260802/topics/email-labeller-gmail',
         GMAIL_PUBSUB_SUBSCRIPTION: 'projects/maxios-gog-mg-20260802/subscriptions/email-labeller-gmail-push',
         PUBSUB_AUDIENCE: 'https://email-labeller.onmax.me/gmail/push',
@@ -20,7 +19,6 @@ export default defineConfig({
         LABELLER_DRY_RUN: 'false',
         LABELLER_TRASH_ENABLED: 'true',
         LABELLER_CLEANUP_ENABLED: 'true',
-        LABELLER_MIN_CONFIDENCE: '0.6',
       },
       // `agent.providers.state: 'memory'` removed the unused CHAT_STATE Durable Object. Its first migration
       // created the class in the deployed Worker, so a second one must delete it.
@@ -28,6 +26,7 @@ export default defineConfig({
         { tag: 'vitehub-agent-state-v1', new_sqlite_classes: ['ViteHubAgentStateDO'] },
         { tag: 'remove-agent-state', deleted_classes: ['ViteHubAgentStateDO'] },
       ],
+      // ViteHub does not write D1 bindings to Nitro's wrangler.json. The Console stores Agent sessions here too.
       d1_databases: [{
         binding: 'DB',
         database_name: 'email-labeller',

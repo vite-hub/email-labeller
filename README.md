@@ -12,7 +12,7 @@ ViteHub Schedule -> Cloudflare Cron every five minutes -> reconcile and renew wa
 
 - `server/agents/labeller.ts`: the Agent. `intercept()` returns the first matching rule, which skips Jev. `driver.ask` asks Jev for a label.
 - `server/lib/gmail.ts`: Gmail through Executor code mode. Executor keeps the Google OAuth credential.
-- `server/lib/sync.ts`: history cursor, idempotent processing, label changes, and watch renewal.
+- `server/lib/sync.ts`: history cursor, idempotent processing, label changes, and watch renewal. `server/lib/sync-lease.ts` lets one sync run at a time across Worker isolates.
 - `server/routes/gmail/push.post.ts`: validates authenticated Pub/Sub push notifications.
 - `server/schedules/gmail.ts`: reconciles Gmail history and renews the watch every five minutes through ViteHub Schedule.
 - `labeller.config.ts`: labels with Gmail colors and Jev descriptions, rules, and cleanup. `vite.config.ts` passes it to `env.server.labeller`.
@@ -61,15 +61,9 @@ Preview label changes with `pnpm labels:sync`, then apply them with `pnpm labels
 
 ## Console
 
-The ViteHub Console runs at `https://email-labeller.onmax.me/_vitehub`. The Cloudflare Access application "Email labeller Console" (team `onmax.cloudflareaccess.com`) covers `/_vitehub` and `/api/_vitehub` and allows only `maximogarciamtnez@gmail.com`, through Cloudflare login or an email code. `server/middleware/console-auth.ts` also verifies the Access token (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`), so the Console stays closed if the Access application is removed. Without Access, it accepts HTTP Basic auth with `LABELLER_ADMIN_TOKEN` as the password. Every labelled email is one Agent session. Its prompt is the sender and subject, and its output is the rule decision or the Jev choice.
+The ViteHub Console runs at `https://email-labeller.onmax.me/_vitehub`. The Cloudflare Access application "Email labeller Console" (team `onmax.cloudflareaccess.com`) covers `/_vitehub` and `/api/_vitehub` and allows only `maximogarciamtnez@gmail.com`, through Cloudflare login or an email code. ViteHub's `cloudflare-access` Console auth also verifies the Access token (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`), so the Console stays closed if the Access application is removed. Scripts can use an Access service token. Every labelled email is one Agent session. Its prompt is the sender and subject, and its output is the rule decision or the Jev choice.
 
-Sessions are stored in the Worker's D1 database, in the `vitehub_agent_invocations` table. Create it once before deploying:
-
-```sh
-pnpm exec wrangler d1 execute email-labeller --remote --file scripts/agent-invocations.sql
-```
-
-The store keeps the last 50,000 sessions for up to 30 days. Local development uses the Console's default SQLite history instead.
+The Console stores sessions in the Worker's D1 database, in the `vitehub_agent_invocations` table, and creates the table on first use. It keeps the last 50,000 sessions for up to 30 days (`console.retention` in `vite.config.ts`). Local development uses the Console's default SQLite history instead.
 
 ## Local development
 
@@ -77,6 +71,14 @@ The store keeps the last 50,000 sessions for up to 30 days. Local development us
 corepack pnpm install
 corepack pnpm db:migrate
 corepack pnpm dev
+```
+
+Tests run with Node's test runner. The lease tests use a local D1 database from Miniflare:
+
+```sh
+corepack pnpm build  # generates .vitehub/types for typecheck
+corepack pnpm typecheck
+corepack pnpm test
 ```
 
 Preview decisions for a Gmail search without changing Gmail:
@@ -92,7 +94,7 @@ The Worker is deployed at `https://email-labeller.onmax.me` with a D1 database, 
 
 Gmail watch publishes to Google Pub/Sub, whose authenticated push subscription calls `/gmail/push`. The schedule reconciles missed notifications and renews the watch. The Pub/Sub topic and subscription are in Google Cloud project `maxios-gog-mg-20260802`.
 
-Every push to `main` deploys the Worker through `.github/workflows/deploy.yml`. The workflow installs, builds, typechecks, and runs `wrangler deploy`. Run it again from the Actions tab with "Run workflow". It needs the `CLOUDFLARE_API_TOKEN` repository secret, a Cloudflare API token with Workers Scripts, Workers Routes, and D1 edit access.
+Every push to `main` deploys the Worker through `.github/workflows/deploy.yml`. The workflow installs, builds, typechecks, tests, and runs `wrangler deploy`. Run it again from the Actions tab with "Run workflow". It needs the `CLOUDFLARE_API_TOKEN` repository secret, a Cloudflare API token with Workers Scripts, Workers Routes, and D1 edit access.
 
 To deploy from a local checkout:
 
@@ -102,7 +104,15 @@ pnpm typecheck
 pnpm exec wrangler deploy --config .output/server/wrangler.json
 ```
 
-The D1 binding, custom domain, Cron Trigger, and nonsecret variables come from `nitro.config.ts`. Apply new D1 migrations remotely before deploying code that needs them. Cloudflare stores secrets separately from `.env`; never put their values in Wrangler config.
+The D1 binding, custom domain, Cron Trigger, and nonsecret variables come from `nitro.config.ts`. Nonsecret values that match the defaults in `vite.config.ts` are not repeated there.
+
+The deploy workflow does not migrate D1. Apply each new file in `server/databases/migrations/` before you deploy code that needs it:
+
+```sh
+pnpm exec wrangler d1 execute email-labeller --remote --file server/databases/migrations/0002_sync_lease.sql
+```
+
+Earlier migrations were applied this way, not with `wrangler d1 migrations apply`. That command tracks applied files in its own `d1_migrations` table, so it could run every migration again. Cloudflare stores secrets separately from `.env`; never put their values in Wrangler config.
 
 ## Patches
 
@@ -111,4 +121,4 @@ The D1 binding, custom domain, Cron Trigger, and nonsecret variables come from `
 - `nitro`: type declarations for `nitro/h3`.
 - `pkce-challenge`: a default browser export for Worker bundling through `@ai-sdk/mcp`.
 
-Agents use `agent: { providers: { state: { provider: 'memory' } } }`: this app has no Channels or hosted chat, so it needs no `CHAT_STATE` Durable Object. `nitro.config.ts` keeps the migration that deleted that class from the deployed Worker. The Console Access check in `server/middleware/console-auth.ts` stays until vite-hub/vitehub#1485 is released.
+Agents use `agent: { providers: { state: { provider: 'memory' } } }`: this app has no Channels or hosted chat, so it needs no `CHAT_STATE` Durable Object. `nitro.config.ts` keeps the migration that deleted that class from the deployed Worker.

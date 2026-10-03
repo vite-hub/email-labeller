@@ -1,0 +1,1 @@
+ALTER TABLE `mailbox` ADD `sync_lease_until` integer;
