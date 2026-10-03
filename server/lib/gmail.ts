@@ -1,8 +1,10 @@
 import { useServerEnv } from '#vitehub/env/server'
 import type { Email } from './labeller'
 
-// Gmail through Executor code mode. Executor keeps the Google OAuth credential; this process only has an Executor
-// API key. Each call sends one sandboxed script, so several Gmail requests share a single round trip.
+// Gmail through Executor code mode. Executor keeps the Google OAuth credential in the org-owned `gmail` connection.
+// On Executor's Cloudflare host, the Access service token is the caller's identity; each Access identity is a separate
+// subject, so only org-owned connections are shared with this Worker. Each call sends one sandboxed script, so several
+// Gmail requests share a single round trip. Results must be JSON: Executor rejects `undefined` values with HTTP 400.
 
 interface ExecutionResponse {
   status: 'completed' | 'paused'
@@ -13,7 +15,7 @@ type GmailError = Error & { code?: string, status?: number }
 
 // Runs in the Executor sandbox. `call()` unwraps Executor's `{ ok, data }` tool result.
 const prelude = (connection: string) => `
-const gmail = tools.gmail.user[${JSON.stringify(connection)}].gmail.users
+const gmail = tools.gmail.org[${JSON.stringify(connection)}].gmail.users
 async function call(result) {
   const r = await result
   if (r.ok) return r.data
@@ -31,7 +33,7 @@ const input = ${JSON.stringify(input)}
 try {
   return { ok: true, value: await (async () => { ${body} })() }
 } catch (error) {
-  return { ok: false, message: String(error.message), code: error.code, status: error.status }
+  return { ok: false, message: String(error.message), code: error.code ?? null, status: error.status ?? null }
 }`
   const response = await fetch(new URL('/api/executions', executor.url), {
     method: 'POST',
@@ -52,7 +54,7 @@ try {
   const execution = await response.json() as ExecutionResponse
   const result = execution.structured?.result as
     | { ok: true, value: T }
-    | { ok: false, message: string, code?: string, status?: number }
+    | { ok: false, message: string, code: string | null, status: number | null }
     | undefined
   if (execution.status !== 'completed' || !result) {
     throw new Error(`Executor run did not complete: ${execution.structured?.error ?? execution.status}`)
