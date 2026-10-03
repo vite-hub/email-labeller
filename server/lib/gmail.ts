@@ -30,10 +30,12 @@ async function execute<T>(body: string, input: unknown, options: { write?: boole
   const { executor } = useServerEnv()
   const code = `${prelude(executor.connection)}
 const input = ${JSON.stringify(input)}
+// Executor only returns JSON values: the round trip drops \`undefined\` properties, as JSON.stringify does.
+const json = value => JSON.parse(JSON.stringify(value ?? null))
 try {
-  return { ok: true, value: await (async () => { ${body} })() }
+  return json({ ok: true, value: await (async () => { ${body} })() })
 } catch (error) {
-  return { ok: false, message: String(error.message), code: error.code ?? null, status: error.status ?? null }
+  return json({ ok: false, message: String(error.message), code: error.code ?? null, status: error.status ?? null })
 }`
   const response = await fetch(new URL('/api/executions', executor.url), {
     method: 'POST',
