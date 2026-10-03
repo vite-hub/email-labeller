@@ -29,6 +29,7 @@
     "@types/node": "^24.0.0",
     "drizzle-kit": "^0.31.11",
     "miniflare": "^4.20260730.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wrangler": "^4.147.0"
   }
 }

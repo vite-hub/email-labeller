@@ -92,7 +92,9 @@ The Worker is deployed at `https://email-labeller.onmax.me` with a D1 database, 
 
 Gmail watch publishes to Google Pub/Sub, whose authenticated push subscription calls `/gmail/push`. The schedule reconciles missed notifications and renews the watch. The Pub/Sub topic and subscription are in Google Cloud project `maxios-gog-mg-20260802`.
 
-To redeploy the existing Worker after a code change:
+Every push to `main` deploys the Worker through `.github/workflows/deploy.yml`. The workflow installs, builds, typechecks, and runs `wrangler deploy`. Run it again from the Actions tab with "Run workflow". It needs the `CLOUDFLARE_API_TOKEN` repository secret, a Cloudflare API token with Workers Scripts, Workers Routes, and D1 edit access.
+
+To deploy from a local checkout:
 
 ```sh
 pnpm build
@@ -102,20 +104,10 @@ pnpm exec wrangler deploy --config .output/server/wrangler.json
 
 The D1 binding, custom domain, Cron Trigger, and nonsecret variables come from `nitro.config.ts`. Apply new D1 migrations remotely before deploying code that needs them. Cloudflare stores secrets separately from `.env`; never put their values in Wrangler config.
 
-## ViteHub patches
+## Patches
 
-`patches/` holds ViteHub changes until they are released upstream. Remove each one when the app upgrades to a ViteHub release that includes it.
+`patches/` holds dependency fixes until they are released upstream. Remove each one when the app upgrades to a release that includes it. The `vite-hub` build in `package.json` no longer needs the earlier `vite-hub`, `@vite-hub/agent`, and `@vite-hub/env` patches.
 
-- `@vite-hub/agent`:
-  - `ask`, `driver.ask`, Jev decisions in `llmGate()` and `llmRoute()`, and Jev through TypeSafe or Vercel AI Gateway (vite-hub/vitehub#1475).
-  - `intercept()` and structured `runAgent(agent, { data })` input with a `data` schema on `defineAgent` (vite-hub/vitehub#1461, merged).
-  - The Agent Vite config hook replaces `config.nitro` in place, so `wrangler.json` lists each required secret once (vite-hub/vitehub#1462).
-  - Invocations of an Agent without `name` record the name the Console discovered from its file (vite-hub/vitehub#1528).
-  - A failure stub for the optional Node provider-agent path, which avoids bundling `@t3tools/provider-runtime` into this Worker. Provider drivers are unavailable with this local patch. Local only.
-- `vite-hub`:
-  - The Console marks unnamed Agents with their discovered name (vite-hub/vitehub#1528).
-  - `/api/_vitehub/console/usage` answers 404 instead of 500 when Agents are not enabled (vite-hub/vitehub#1530 stops registering the route instead).
-- `@vite-hub/env`: `typesafeEnv({ provider })` (vite-hub/vitehub#1475).
 - `nitro`: type declarations for `nitro/h3`.
 - `pkce-challenge`: a default browser export for Worker bundling through `@ai-sdk/mcp`.
 
