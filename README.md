@@ -197,7 +197,7 @@ The cursor advances only after the full batch succeeds, including in dry-run mod
 
 When Gmail history expires, recovery searches Inbox messages received since the last saved sync timestamp, collects every page, then processes them before advancing the cursor. Initial setup starts from Gmail's current cursor. Imported older messages or messages outside Inbox can need explicit backfill.
 
-The project uses a Nitro beta and a pinned ViteHub snapshot. Use `pnpm build` and `pnpm typecheck` before deploying. After deployment, check `/api/health` and use `/api/preview` to verify your Executor connection and rules without changing Gmail.
+The project uses a Nitro beta and the latest ViteHub package published through `pkg.pr.new`, locked in `pnpm-lock.yaml`. Use `pnpm build` and `pnpm typecheck` before deploying. After deployment, check `/api/health` and use `/api/preview` to verify your Executor connection and rules without changing Gmail.
 
 ## License
 
