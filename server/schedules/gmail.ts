@@ -7,7 +7,12 @@ import { renewWatch, sync } from '../lib/sync'
 export default defineSchedule({
   cron: '*/5 * * * *',
   async handler() {
-    await renewWatch()
+    try {
+      await renewWatch()
+    }
+    catch (error) {
+      console.error('[labeller] watch renewal failed', error)
+    }
     await sync()
   },
 })

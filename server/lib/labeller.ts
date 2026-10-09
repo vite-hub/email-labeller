@@ -71,7 +71,7 @@ export interface LabellerConfig {
   labels: Readonly<Record<string, LabelSettings>>
   /** Runs in order for each new Inbox message. The first match wins and skips Jev. */
   rules: Readonly<Record<string, Rule>>
-  /** Moves old messages to Trash by label. Runs only when Trash is enabled. */
+  /** Moves old messages to Trash by label when cleanup is enabled and dry-run mode is off. */
   cleanup?: Readonly<Record<string, CleanupRule>>
 }
 
@@ -97,7 +97,10 @@ function compile(pattern: string): (value: string) => boolean {
     const regex = /^\/(.+)\/([a-z]*)$/.exec(pattern)
     if (regex) {
       const expression = new RegExp(regex[1], regex[2])
-      test = value => expression.test(value)
+      test = (value) => {
+        expression.lastIndex = 0
+        return expression.test(value)
+      }
     }
     else {
       const needle = pattern.toLowerCase()

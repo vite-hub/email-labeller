@@ -1,47 +1,88 @@
 # Email labeller
 
-Labels new Gmail messages. Rules from `labeller.config.ts` decide first. When no rule matches, TypeSafe Jev chooses one of your labels. Jev requests go through Vercel AI Gateway with `AI_GATEWAY_API_KEY`.
+Labels new Gmail Inbox messages with configurable rules and TypeSafe Jev through Vercel AI Gateway. Gmail operations go through [Executor](https://executor.onmax.me), which stores and refreshes the Google OAuth credential. The app runs on a Cloudflare Worker with KV storage for its Gmail cursor and watch expiry.
+
+Start in dry-run mode. Rules, Trash actions, and cleanup are configurable, and the default settings make no changes to Gmail. Deployment targets come from your environment. No Cloudflare account, Worker domain, or KV namespace ID is hard-coded.
 
 ```text
-Gmail watch -> Pub/Sub push -> authenticated POST /gmail/push -> sync()
-ViteHub Schedule -> Cloudflare Cron every five minutes -> reconcile and renew watch
-  -> Gmail history since the stored cursor -> new Inbox messages
-  -> labeller Agent: intercept(rules) or driver.ask (Jev)
-  -> apply label changes through Executor -> record decision
+Gmail watch -> Pub/Sub -> authenticated POST /gmail/push
+  -> acknowledge -> sync Gmail history
+Cloudflare Cron every five minutes -> renew watch and reconcile history
+  -> rules first, Jev when no rule matches
+  -> apply Gmail changes in live mode -> advance history cursor in KV
+Cloudflare Cron daily -> optional cleanup by label and age
 ```
 
-- `server/agents/labeller.ts`: the Agent. `intercept()` returns the first matching rule, which skips Jev. `driver.ask` asks Jev for a label.
-- `server/lib/gmail.ts`: Gmail through Executor code mode. Executor keeps the Google OAuth credential.
-- `server/lib/sync.ts`: history cursor, idempotent processing, label changes, and watch renewal. `server/lib/sync-lease.ts` lets one sync run at a time across Worker isolates.
-- `server/routes/gmail/push.post.ts`: validates authenticated Pub/Sub push notifications.
-- `server/schedules/gmail.ts`: reconciles Gmail history and renews the watch every five minutes through ViteHub Schedule.
-- `labeller.config.ts`: labels with Gmail colors and Jev descriptions, rules, and cleanup. `vite.config.ts` passes it to `env.server.labeller`.
-- `server/lib/cleanup.ts`, `server/schedules/cleanup.ts`: move old messages to Trash by label once a day, only when Trash is enabled.
-- `scripts/sync-labels.mjs`: creates missing active labels and hides superseded labels in the sidebar without deleting labels or changing messages.
-- `server/api/preview.post.ts`, `server/api/sync.post.ts`, `server/api/replay.post.ts`, `server/api/cleanup.post.ts`, `server/api/backfill.post.ts`: admin endpoints (`Authorization: Bearer $LABELLER_ADMIN_TOKEN`). Replay applies up to 100 previously recorded dry-run messages after live mode is enabled. Cleanup runs the cleanup rules now, or previews them while Trash is disabled. Backfill runs the labeller on existing messages from a Gmail search, one page per request, or on up to 100 given `ids`; pass `nextPageToken` back until it is absent. Add `relabel: true` after changing labels or rules: it decides messages again and replaces their managed labels.
+## Requirements
 
-## Configure
+- Node.js 24.15 or later and pnpm 10.33.0 through Corepack.
+- An Executor API key and a Gmail connection with permission to read messages, manage labels, modify messages, and start a watch. The Worker adapter uses an **org-owned** connection at `tools.gmail.org[connection].gmail.users`.
+- A Vercel AI Gateway key with access to `typesafe-ai/jev` for messages that do not match a rule.
+- A Cloudflare account and KV namespace for deployment.
+- A Google Cloud Pub/Sub topic and authenticated push subscription for immediate notifications. Five-minute polling also works without a watch.
 
-Edit `labeller.config.ts`. It has three parts:
+The project pins a Nitro 3 beta and a ViteHub commit published through `pkg.pr.new`. Keep `pnpm-lock.yaml` when copying it. The locked dependencies build without patches.
+
+## Local setup
+
+```sh
+corepack pnpm install --frozen-lockfile
+cp .env.example .env
+```
+
+Set these values in `.env`:
+
+| Variable | Purpose |
+| --- | --- |
+| `EXECUTOR_URL` | Executor's API origin. Defaults to `https://executor.onmax.me`; override it for another instance. |
+| `EXECUTOR_API_KEY` | Executor API key. |
+| `EXECUTOR_GMAIL_CONNECTION` | Name of the org-owned Gmail connection. |
+| `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | Service token if Executor requires Cloudflare Access. |
+| `AI_GATEWAY_API_KEY` | Jev access through Vercel AI Gateway. |
+| `LABELLER_ADMIN_TOKEN` | A long random bearer token for admin endpoints. Missing configuration closes those endpoints. |
+| `LABELLER_DRY_RUN` | Keep `true` while reviewing decisions. |
+| `LABELLER_TRASH_ENABLED` | Defaults to `false`; gates rule actions with `trash: true`. |
+| `LABELLER_CLEANUP_ENABLED` | Defaults to `false`; independently gates daily cleanup. |
+| `LABELLER_MIN_CONFIDENCE` | Minimum Jev probability for applying a configured label; defaults to `0.6`. |
+
+Leave the optional Pub/Sub values blank to use polling, or configure them as described below.
+
+```sh
+corepack pnpm dev
+```
+
+Use the URL printed by Vite. For example, if it uses port 3000:
+
+```sh
+curl http://localhost:3000/api/health
+curl -X POST http://localhost:3000/api/preview \
+  -H "authorization: Bearer $LABELLER_ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"query":"in:inbox","max":10}'
+```
+
+The shell must have `LABELLER_ADMIN_TOKEN` set for this command; copying it into `.env` alone does not export it to your shell. Preview reads Gmail and runs the Agent, but does not change messages or the sync cursor. Agent runs may incur model costs.
+
+Call `POST /api/sync` to initialize the history cursor and poll manually during local development. The first initialization starts from Gmail's current history, so existing messages need backfill.
+
+## Labels and rules
+
+Edit `labeller.config.ts`. Labels with a `description` are available to Jev. Rules run in declaration order; the first match wins and skips Jev. A rule with no actions also skips Jev and leaves the message unchanged.
 
 ```ts
+import type { LabellerConfig } from './server/lib/labeller.ts'
+
 export default {
   labels: {
-    'GitHub/Bots': { color: { textColor: '#000000', backgroundColor: '#cccccc' } },
-    'Security': {
-      description: 'Sign-in alerts, new devices, verification codes, 2FA, password resets, and expiring tokens',
-      color: { textColor: '#ffffff', backgroundColor: '#fb4c2f' },
+    GitHub: { color: { textColor: '#ffffff', backgroundColor: '#4a86e8' } },
+    Promotions: {
+      description: 'Marketing, discounts, coupons, and campaigns',
+      color: { textColor: '#666666', backgroundColor: '#efefef' },
     },
   },
   rules: {
-    deleteGithubBots: {
-      from: 'notifications@github.com',
-      subject: '/^Re:/i',
-      header: { 'x-github-sender': '/\\[bot\\]$/i' },
-      label: 'GitHub/Bots',
-      trash: true,
-    },
     github: { from: 'notifications@github.com', label: 'GitHub' },
+    promotions: { hasLabel: 'CATEGORY_PROMOTIONS', label: 'Promotions' },
   },
   cleanup: {
     promotions: { label: 'Promotions', olderThan: 14 },
@@ -49,76 +90,115 @@ export default {
 } satisfies LabellerConfig
 ```
 
-- `labels`: the Gmail labels this app manages. Colors must come from [Gmail's label palette](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels). A label with a `description` is available to Jev when no rule matches. Gmail has no description field, so the description only guides Jev.
-- `rules`: run in order, and the first match wins and skips Jev. Text matches are case-insensitive substrings, or a regular expression written as `"/pattern/flags"`. A list matches any item. Fields: `from`, `to`, `subject`, `body`, `listId`, `hasLabel`, `header`, and `not`. Actions: `label`, `archive`, `read`, `star`, and `trash`. A rule without actions leaves the message unchanged and skips Jev.
-- `cleanup`: once a day, moves messages with the label that are older than `olderThan` days to Trash. Starred messages are kept.
+Colors must come from [Gmail's label palette](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels). Descriptions guide Jev; Gmail does not store them. Label names with `/` form nested labels in Gmail.
 
-`LABELLER_TRASH_ENABLED=true` lets rules with `trash: true` move new messages to Trash; the `deleteGithubBots` rule uses it for GitHub bot notifications. `LABELLER_CLEANUP_ENABLED=true` separately enables the daily `cleanup` rules. Preview cleanup with `POST /api/cleanup`. Gmail deletes messages in Trash after 30 days.
+Rule fields are `from`, `to`, `subject`, `body`, `listId`, `hasLabel`, `header`, and `not`. Text matches are case-insensitive substrings, or regular expressions written as `"/pattern/flags"`. A list matches any item; all specified fields must match. Regex state resets for every match, so `g` and `y` flags also work consistently across messages.
 
-Copy `.env.example` to `.env` for local development. The deployed Worker reads its own Cloudflare secrets and bindings. Set `LABELLER_DRY_RUN=true` to record decisions without changing Gmail.
+Actions are `label`, `archive`, `read`, `star`, and `trash`. The promotions rule uses Gmail's `CATEGORY_PROMOTIONS` system label across senders; messages without it fall through to Jev. The sample GitHub bot rule requests Trash, but takes effect only when `LABELLER_TRASH_ENABLED=true` and dry-run mode is off.
 
-Preview label changes with `pnpm labels:sync`, then apply them with `pnpm labels:sync --apply`. It creates missing labels, applies colors, and hides other user labels in the sidebar. It never deletes labels or edits messages. The app only processes messages added after its saved Gmail history cursor; changing rules does not retroactively process older mail.
+Cleanup moves old messages with the configured label to Trash, keeping starred messages. It runs at 04:00 UTC and requires `LABELLER_CLEANUP_ENABLED=true` and `LABELLER_DRY_RUN=false`. The rule Trash flag does not gate cleanup. Cleanup includes existing labelled mail, processes up to 500 matches per rule per run, and leaves further matches for later runs. Gmail permanently deletes messages in Trash after 30 days.
 
-## Console
-
-The ViteHub Console runs at `https://email-labeller.onmax.me/_vitehub`. The Cloudflare Access application "Email labeller Console" (team `onmax.cloudflareaccess.com`) covers `/_vitehub` and `/api/_vitehub` and allows only `maximogarciamtnez@gmail.com`, through Cloudflare login or an email code. ViteHub's `cloudflare-access` Console auth also verifies the Access token (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`), so the Console stays closed if the Access application is removed. Scripts can use an Access service token. Every labelled email is one Agent session. Its prompt is the sender and subject, and its output is the rule decision or the Jev choice.
-
-The Console stores sessions in the Worker's D1 database, in the `vitehub_agent_invocations` table, and creates the table on first use. It keeps the last 50,000 sessions for up to 30 days (`console.retention` in `vite.config.ts`). Local development uses the Console's default SQLite history instead.
-
-## Local development
+The app creates missing labels when applying decisions. Use the label setup CLI to preview and apply configured colors and visibility:
 
 ```sh
-corepack pnpm install
-corepack pnpm db:migrate
-corepack pnpm dev
+pnpm labels:sync
+pnpm labels:sync --apply
 ```
 
-Tests run with Node's test runner. The lease tests use a local D1 database from Miniflare:
+It uses the same Executor URL, org-owned connection, and optional Access headers as the Worker. Unmanaged labels keep their current visibility. To also hide them from Gmail's sidebar, preview with `pnpm labels:sync --hide-unmanaged`, then apply with `pnpm labels:sync --apply --hide-unmanaged`. Hiding leaves labels attached to messages and searchable.
 
-```sh
-corepack pnpm build  # generates .vitehub/types for typecheck
-corepack pnpm typecheck
-corepack pnpm test
-```
+## Admin endpoints
 
-Preview decisions for a Gmail search without changing Gmail:
+All endpoints below require `Authorization: Bearer <LABELLER_ADMIN_TOKEN>`.
 
-```sh
-curl -X POST localhost:3000/api/preview -H "authorization: Bearer $LABELLER_ADMIN_TOKEN" \
-  -H 'content-type: application/json' -d '{"query":"in:inbox","max":10}'
-```
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /api/preview` | Read-only message preview. Accepts `query` and `max`, from 1 to 50. |
+| `POST /api/sync` | Renew the watch if configured, then process messages since the saved cursor. |
+| `POST /api/backfill` | Process one search page with `query`, `max` up to 100, and optional `pageToken`, or explicit `ids` up to 100. Returns `nextPageToken`. |
+| `POST /api/cleanup` | Run cleanup now. Returns a preview while dry-run mode is on or cleanup is disabled. |
+
+Pass `nextPageToken` back as `pageToken` until absent when backfilling. Every call decides messages again. Set `relabel: true` to also remove other managed labels. Dry-run backfill returns decisions without changing Gmail. Once you switch to live mode, run backfill again for messages you want to apply. Changing rules alone does not revisit earlier mail.
+
+If your rules archive or trash messages, a live backfill can change the search results while you paginate. For bulk processing, collect message IDs first and submit them in batches of up to 100.
+
+## Console and stored data
+
+The ViteHub Console is available at `/_vitehub` during `pnpm dev`. It records local Agent sessions in ViteHub's default SQLite journal, which may contain email data. The production Worker does not include the Console or its SQL journal.
+
+KV stores only two entries, `gmail:history` with the history cursor and its sync timestamp, and `gmail:watch-expiry` with the watch expiration. The Worker does not store message contents or processing decisions. Unmatched email data, including up to 4,000 body characters, goes to Jev through Vercel AI Gateway. Executor handles Gmail credentials and operations.
 
 ## Cloudflare deployment
 
-The Worker is deployed at `https://email-labeller.onmax.me` with a D1 database, a five-minute sync Cron Trigger, a daily cleanup Cron Trigger, `LABELLER_DRY_RUN=false`, `LABELLER_TRASH_ENABLED=true`, and `LABELLER_CLEANUP_ENABLED=true`. Its secrets include an Executor API key, an AI Gateway key, an admin token, and a dedicated Cloudflare Access service token for `executor.onmax.me`. New GitHub bot notifications move to Trash with the `GitHub/Bots` label; other GitHub notifications receive `GitHub`. Cleanup rules move Promotions older than 14 days and Security older than 30 days to Trash once a day. Older messages are left alone.
+Create a KV namespace with `pnpm exec wrangler kv namespace create email-labeller`. Set these build-time values in `.env` or your build environment:
 
-Gmail watch publishes to Google Pub/Sub, whose authenticated push subscription calls `/gmail/push`. The schedule reconciles missed notifications and renews the watch. The Pub/Sub topic and subscription are in Google Cloud project `maxios-gog-mg-20260802`.
+| Variable | Value |
+| --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID. |
+| `CLOUDFLARE_KV_NAMESPACE_ID` | ID returned when you create the KV namespace. |
+| `CLOUDFLARE_WORKER_DOMAIN` | Optional custom domain; omit to use `workers.dev`. |
 
-Every push to `main` deploys the Worker through `.github/workflows/deploy.yml`. The workflow installs, builds, typechecks, tests, and runs `wrangler deploy`. Run it again from the Actions tab with "Run workflow". It needs the `CLOUDFLARE_API_TOKEN` repository secret, a Cloudflare API token with Workers Scripts, Workers Routes, and D1 edit access.
+ViteHub selects the Cloudflare deployment preset and supplies Nitro's `cloudflare-module` output. `nitro.config.ts` does not repeat that preset, so the host is selected in one place. The Worker name comes from the fork's `package.json`; Cloudflare Workers Builds can override it with `WRANGLER_CI_OVERRIDE_NAME`.
 
-To deploy from a local checkout:
+`nitro.config.ts` copies only the listed nonsecret runtime settings from the build environment into Wrangler variables. Keep `LABELLER_DRY_RUN=true` and both Trash and cleanup flags `false` for the initial deployment. Executor URL and connection, and optional Pub/Sub settings must also be present when building.
 
 ```sh
 pnpm build
 pnpm typecheck
-pnpm exec wrangler deploy --config .output/server/wrangler.json
+
+pnpm exec wrangler secret put EXECUTOR_API_KEY --config .output/server/wrangler.json
+pnpm exec wrangler secret put AI_GATEWAY_API_KEY --config .output/server/wrangler.json
+pnpm exec wrangler secret put LABELLER_ADMIN_TOKEN --config .output/server/wrangler.json
+# Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET too if Executor requires them.
+pnpm run deploy
 ```
 
-The D1 binding, custom domain, Cron Trigger, and nonsecret variables come from `nitro.config.ts`. Nonsecret values that match the defaults in `vite.config.ts` are not repeated there.
+`pnpm run deploy` rejects a build without a real account and KV namespace ID. A build without them still works for local development and preview. `pnpm preview` runs the built Worker locally. Local KV data stays on your machine and does not initialize the deployed namespace.
 
-The deploy workflow does not migrate D1. Apply each new file in `server/databases/migrations/` before you deploy code that needs it:
+The build generates the KV binding and both Cron Triggers in `.output/server/wrangler.json`. Worker secrets are separate from local `.env`; their values do not enter the generated config. Rebuild after changing nonsecret variables. To apply labels after reviewing previews, set `LABELLER_DRY_RUN=false`, rebuild, and redeploy. Dry-run sync advances the history cursor, so use `POST /api/backfill` for earlier messages. Enable Trash and cleanup separately only after reviewing those rules.
+
+There are no application database migrations. An existing D1 deployment starts with a fresh cursor when moved to KV. It leaves earlier mail for explicit backfill and does not import saved decisions.
+
+### GitHub Actions
+
+`.github/workflows/check.yml` runs build and typecheck on pull requests and pushes to `main`. It needs no application secrets.
+
+Deployment is opt-in. Set the repository variable `DEPLOY_ENABLED=true`, the build-time variables listed above, and any nonsecret runtime variables from `.env.example`. Add a `CLOUDFLARE_API_TOKEN` repository secret with Workers Scripts, Workers Routes, and Workers KV Storage edit permissions for your account. The deployment workflow defaults to dry-run with Trash and cleanup disabled when their variables are absent.
+
+`.github/workflows/deploy.yml` checks and deploys on pushes to `main` and manual runs. Create the KV namespace and configure application secrets before enabling it.
+
+## Gmail push setup
+
+Create a topic in the Google Cloud project associated with Executor's Gmail OAuth client. [Gmail requires the watch topic to belong to that project](https://developers.google.com/workspace/gmail/api/guides/push). Grant `gmail-api-push@system.gserviceaccount.com` permission to publish to it.
+
+Create an authenticated Pub/Sub push subscription targeting `https://<your-domain>/gmail/push`, using a dedicated service account and that URL as its OIDC audience. Configure the Pub/Sub service agent and subscription creator with the permissions needed for [authenticated push](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
+
+Set these Worker variables:
+
+```text
+GMAIL_PUBSUB_TOPIC=projects/<project-id>/topics/<topic-name>
+GMAIL_PUBSUB_SUBSCRIPTION=projects/<project-id>/subscriptions/<subscription-name>
+PUBSUB_AUDIENCE=https://<your-domain>/gmail/push
+PUBSUB_SERVICE_ACCOUNT=<push-account>@<project-id>.iam.gserviceaccount.com
+```
+
+The route verifies Google's JWT signature, issuer, audience, verified service-account email, subscription, and notification shape. It acknowledges the push and runs sync in the background. If that sync fails, polling retries from the saved cursor. The schedule renews the watch when it expires within a day and polls for missed notifications every five minutes. `POST /api/sync` can start the watch immediately.
+
+## Verification and current limits
 
 ```sh
-pnpm exec wrangler d1 execute email-labeller --remote --file server/databases/migrations/0002_sync_lease.sql
+corepack pnpm build  # generates .vitehub/types for typecheck
+corepack pnpm typecheck
 ```
 
-Earlier migrations were applied this way, not with `wrangler d1 migrations apply`. That command tracks applied files in its own `d1_migrations` table, so it could run every migration again. Cloudflare stores secrets separately from `.env`; never put their values in Wrangler config.
+This app manages one mailbox with best-effort processing. Sync calls in the same Worker isolate are coalesced, but other isolates and manual backfills can overlap. KV is eventually consistent and has no atomic lock. Concurrent or failed runs can repeat processing, overwrite a cursor with an older value, or call the model again with a different result. Label additions and removals are repeatable, but a new decision can add a different label. This template accepts those tradeoffs for a small mailbox.
 
-## Patches
+The cursor advances only after the full batch succeeds, including in dry-run mode. A failed Gmail operation or cursor write leaves work for a later retry. No decision journal or replay endpoint is kept. Use backfill to revisit messages after changing rules or switching from dry-run to live mode.
 
-`patches/` holds dependency fixes until they are released upstream. Remove each one when the app upgrades to a release that includes it. The `vite-hub` build in `package.json` no longer needs the earlier `vite-hub`, `@vite-hub/agent`, and `@vite-hub/env` patches.
+When Gmail history expires, recovery searches Inbox messages received since the last saved sync timestamp, collects every page, then processes them before advancing the cursor. Initial setup starts from Gmail's current cursor. Imported older messages or messages outside Inbox can need explicit backfill.
 
-- `nitro`: type declarations for `nitro/h3`.
-- `pkce-challenge`: a default browser export for Worker bundling through `@ai-sdk/mcp`.
+The project uses a Nitro beta and a pinned ViteHub snapshot. Use `pnpm build` and `pnpm typecheck` before deploying. After deployment, check `/api/health` and use `/api/preview` to verify your Executor connection and rules without changing Gmail.
 
-Agents use `agent: { providers: { state: { provider: 'memory' } } }`: this app has no Channels or hosted chat, so it needs no `CHAT_STATE` Durable Object. `nitro.config.ts` keeps the migration that deleted that class from the deployed Worker.
+## License
+
+[MIT](LICENSE).

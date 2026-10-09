@@ -9,7 +9,7 @@ const bodySchema = v.object({
   max: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(50)), 10),
 })
 
-/** Shows what the labeller would do for a Gmail search. Never changes Gmail or records decisions. */
+/** Shows what the labeller would do for a Gmail search. Never changes Gmail or the sync cursor. */
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const { query, max } = await readValidatedBody(event, body => v.parse(bodySchema, body ?? {}))

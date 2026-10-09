@@ -1,3 +1,4 @@
+import { useServerEnv } from '#vitehub/env/server'
 import { defineSchedule } from 'vite-hub/schedule'
 import { cleanup } from '../lib/cleanup'
 
@@ -5,6 +6,8 @@ import { cleanup } from '../lib/cleanup'
 export default defineSchedule({
   cron: '0 4 * * *',
   async handler() {
+    const { cleanupEnabled, dryRun } = useServerEnv().labeller
+    if (!cleanupEnabled || dryRun) return
     await cleanup()
   },
 })

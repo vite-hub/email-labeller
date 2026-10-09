@@ -15,8 +15,8 @@ const bodySchema = v.object({
 })
 
 /**
- * Runs the labeller on existing messages from a Gmail search, one page per request, or on up to 100 given IDs. Messages that already have a
- * decision are skipped unless `relabel` is set. Call again with `nextPageToken` until it is absent.
+ * Runs the labeller on existing messages from a Gmail search, one page per request, or on up to 100 given IDs.
+ * Every call decides messages again. `relabel` also replaces their managed labels.
  */
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

@@ -9,16 +9,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "db:generate": "vitehub db generate",
-    "db:migrate": "node -e \"require('node:fs').mkdirSync('.vitehub/data/database', { recursive: true })\" && vitehub db migrate",
-    "labels:sync": "node --env-file=.env scripts/sync-labels.mjs",
-    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
-    "test": "node --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "labels:sync": "node --env-file-if-exists=.env scripts/sync-labels.mjs",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "deploy": "node --env-file-if-exists=.env scripts/deploy.mjs"
   },
   "dependencies": {
     "advocaat": "^0.0.6",
-    "drizzle-orm": "^0.45.3",
     "h3": "2.0.1-rc.31",
     "jose": "^6.2.12",
     "nitro": "3.0.260903-beta",
@@ -28,9 +25,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "drizzle-kit": "^0.31.11",
-    "miniflare": "^4.20260730.0",
     "typescript": "^6.0.3",
     "wrangler": "^4.147.0"
-  }
+  },
+  "license": "MIT"
 }

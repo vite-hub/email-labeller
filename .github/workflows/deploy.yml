@@ -14,7 +14,22 @@ permissions:
 
 jobs:
   deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_KV_NAMESPACE_ID: ${{ vars.CLOUDFLARE_KV_NAMESPACE_ID }}
+      CLOUDFLARE_WORKER_DOMAIN: ${{ vars.CLOUDFLARE_WORKER_DOMAIN }}
+      EXECUTOR_URL: ${{ vars.EXECUTOR_URL }}
+      EXECUTOR_GMAIL_CONNECTION: ${{ vars.EXECUTOR_GMAIL_CONNECTION }}
+      GMAIL_PUBSUB_TOPIC: ${{ vars.GMAIL_PUBSUB_TOPIC }}
+      GMAIL_PUBSUB_SUBSCRIPTION: ${{ vars.GMAIL_PUBSUB_SUBSCRIPTION }}
+      PUBSUB_AUDIENCE: ${{ vars.PUBSUB_AUDIENCE }}
+      PUBSUB_SERVICE_ACCOUNT: ${{ vars.PUBSUB_SERVICE_ACCOUNT }}
+      LABELLER_DRY_RUN: ${{ vars.LABELLER_DRY_RUN || 'true' }}
+      LABELLER_TRASH_ENABLED: ${{ vars.LABELLER_TRASH_ENABLED || 'false' }}
+      LABELLER_CLEANUP_ENABLED: ${{ vars.LABELLER_CLEANUP_ENABLED || 'false' }}
+      LABELLER_MIN_CONFIDENCE: ${{ vars.LABELLER_MIN_CONFIDENCE || '0.6' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,7 +41,6 @@ jobs:
       # The build generates .vitehub/types, which typecheck reads.
       - run: pnpm build
       - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm exec wrangler deploy --config .output/server/wrangler.json
+      - run: pnpm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

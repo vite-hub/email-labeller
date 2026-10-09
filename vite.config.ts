@@ -4,7 +4,7 @@ import { vitehub } from 'vite-hub'
 import { env, typesafeEnv } from 'vite-hub/env'
 import labellerConfig from './labeller.config.ts'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   env: {
     server: {
       // Jev through Vercel AI Gateway: AI_GATEWAY_API_KEY
@@ -12,7 +12,7 @@ export default defineConfig({
       executor: {
         url: env({ default: 'https://executor.onmax.me', source: env.source('EXECUTOR_URL') }),
         apiKey: env({ secret: true, source: env.source('EXECUTOR_API_KEY') }),
-        connection: env({ default: 'personalGmail', source: env.source('EXECUTOR_GMAIL_CONNECTION') }),
+        connection: env({ default: 'gmail', source: env.source('EXECUTOR_GMAIL_CONNECTION') }),
         // Cloudflare Access service token for the public Executor URL. Not needed for the local URL.
         accessClientId: env({ optional: true, secret: true, source: env.source('CF_ACCESS_CLIENT_ID') }),
         accessClientSecret: env({ optional: true, secret: true, source: env.source('CF_ACCESS_CLIENT_SECRET') }),
@@ -25,7 +25,7 @@ export default defineConfig({
       },
       labeller: {
         adminToken: env({ optional: true, secret: true, source: env.source('LABELLER_ADMIN_TOKEN') }),
-        // Record decisions without changing Gmail. Set LABELLER_DRY_RUN=false to apply them.
+        // Preview decisions without changing Gmail. Set LABELLER_DRY_RUN=false to apply them.
         dryRun: env.boolean({ default: true, source: env.source('LABELLER_DRY_RUN') }),
         // Keep destructive rules disabled until explicitly enabled for future messages.
         trashEnabled: env.boolean({ default: false, source: env.source('LABELLER_TRASH_ENABLED') }),
@@ -41,21 +41,18 @@ export default defineConfig({
   },
   plugins: [
     vitehub({
+      // This template uses Worker KV and Cloudflare Cron. ViteHub owns the
+      // Nitro output for this preset; nitro.config.ts only supplies bindings.
       preset: 'cloudflare',
-      // Enables Database on the D1 binding `DB`. nitro.config.ts declares that binding for Wrangler.
-      database: { driver: 'd1' },
+      // nitro.config.ts declares the KV namespace for Wrangler.
+      kv: { driver: 'cloudflare-kv-binding' },
       // This app has no Channels or hosted chat, so Agents need no durable chat state (no CHAT_STATE Durable Object).
       agent: { providers: { state: { provider: 'memory' } } },
-      // The Console at /_vitehub accepts only the Cloudflare Access application "Email labeller Console".
-      // It reads CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD. Agent sessions are stored in the D1 database.
-      console: {
-        access: 'auth',
-        auth: { provider: 'cloudflare-access' },
-        retention: { maxRecords: 50_000, maxAgeMs: 30 * 24 * 60 * 60 * 1000 },
-      },
+      // Enable the Console only for the dev server. No deployed SQL journal.
+      console: command === 'serve',
       schedule: true,
       workflow: false,
     }),
     nitro() as never,
   ],
-})
+}))

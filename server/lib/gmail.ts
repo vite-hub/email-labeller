@@ -1,68 +1,19 @@
 import { useServerEnv } from '#vitehub/env/server'
 import type { Email } from './labeller'
 
-// Gmail through Executor code mode. Executor keeps the Google OAuth credential in the org-owned `gmail` connection.
-// On Executor's Cloudflare host, the Access service token is the caller's identity; each Access identity is a separate
-// subject, so only org-owned connections are shared with this Worker. Each call sends one sandboxed script, so several
-// Gmail requests share a single round trip. Results must be JSON: Executor rejects `undefined` values with HTTP 400.
-
-interface ExecutionResponse {
-  status: 'completed' | 'paused'
-  structured?: { status: string, result?: unknown, error?: string }
-}
+import { execute as runExecutor } from './executor'
 
 type GmailError = Error & { code?: string, status?: number }
 
-// Runs in the Executor sandbox. `call()` unwraps Executor's `{ ok, data }` tool result.
-const prelude = (connection: string) => `
-const gmail = tools.gmail.org[${JSON.stringify(connection)}].gmail.users
-async function call(result) {
-  const r = await result
-  if (r.ok) return r.data
-  const error = new Error(r.error.message)
-  error.code = r.error.code
-  error.status = r.error.status
-  throw error
-}
-`
-
-async function execute<T>(body: string, input: unknown, options: { write?: boolean } = {}): Promise<T> {
+function execute<T>(body: string, input: unknown, options: { write?: boolean } = {}): Promise<T> {
   const { executor } = useServerEnv()
-  const code = `${prelude(executor.connection)}
-const input = ${JSON.stringify(input)}
-// Executor only returns JSON values: the round trip drops \`undefined\` properties, as JSON.stringify does.
-const json = value => JSON.parse(JSON.stringify(value ?? null))
-try {
-  return json({ ok: true, value: await (async () => { ${body} })() })
-} catch (error) {
-  return json({ ok: false, message: String(error.message), code: error.code ?? null, status: error.status ?? null })
-}`
-  const response = await fetch(new URL('/api/executions', executor.url), {
-    method: 'POST',
-    headers: {
-      'authorization': `Bearer ${executor.apiKey.unseal()}`,
-      'content-type': 'application/json',
-      ...executor.accessClientId && executor.accessClientSecret
-        ? {
-            'cf-access-client-id': executor.accessClientId.unseal(),
-            'cf-access-client-secret': executor.accessClientSecret.unseal(),
-          }
-        : {},
-    },
-    // Executor pauses write tools for approval unless the caller approves them up front.
-    body: JSON.stringify({ code, autoApprove: options.write === true }),
-  })
-  if (!response.ok) throw new Error(`Executor responded with HTTP ${response.status}`)
-  const execution = await response.json() as ExecutionResponse
-  const result = execution.structured?.result as
-    | { ok: true, value: T }
-    | { ok: false, message: string, code: string | null, status: number | null }
-    | undefined
-  if (execution.status !== 'completed' || !result) {
-    throw new Error(`Executor run did not complete: ${execution.structured?.error ?? execution.status}`)
-  }
-  if (!result.ok) throw Object.assign(new Error(result.message), { code: result.code, status: result.status }) as GmailError
-  return result.value
+  return runExecutor<T>({
+    url: executor.url,
+    apiKey: executor.apiKey.unseal(),
+    connection: executor.connection,
+    accessClientId: executor.accessClientId?.unseal(),
+    accessClientSecret: executor.accessClientSecret?.unseal(),
+  }, body, input, options)
 }
 
 export interface Label {
@@ -207,10 +158,15 @@ export async function applyChanges(changes: Change[]): Promise<void> {
   if (!changes.length) return
   await execute(`
 await Promise.all(input.map(async ({ id, addLabelIds, removeLabelIds, trash }) => {
-  if (addLabelIds.length || removeLabelIds.length) {
-    await call(gmail.messages.modify({ userId: 'me', id, body: { addLabelIds, removeLabelIds } }))
+  try {
+    if (addLabelIds.length || removeLabelIds.length) {
+      await call(gmail.messages.modify({ userId: 'me', id, body: { addLabelIds, removeLabelIds } }))
+    }
+    if (trash) await call(gmail.messages.trash({ userId: 'me', id }))
+  } catch (error) {
+    // A deleted message must not block the history cursor forever.
+    if (error.status !== 404) throw error
   }
-  if (trash) await call(gmail.messages.trash({ userId: 'me', id }))
 }))`, changes, { write: true })
 }
 

@@ -16,7 +16,7 @@ export default {
     'GitHub/Bots': { color: { textColor: '#000000', backgroundColor: '#cccccc' } },
 
     'Work': {
-      description: 'Quiver work email from colleagues, clients, and company tools',
+      description: 'Work email from colleagues, clients, and company tools',
       color: { textColor: '#000000', backgroundColor: '#fad165' },
     },
     'Jobs': {
@@ -65,9 +65,9 @@ export default {
   // Text matches are case-insensitive substrings, or a regular expression written as "/pattern/flags".
   // A list matches when any item matches. All fields of a rule must match.
   rules: {
-    // Deletes GitHub bot notifications: replies and pushes on issues and pull requests by pullfrog, Codex,
-    // vitehub-bot, pkg-pr-new, and other `[bot]` accounts. The From address is always notifications@github.com; the
-    // sender header names the bot. Needs LABELLER_TRASH_ENABLED=true. Trash keeps them for 30 days.
+    // Deletes GitHub bot notifications: replies and pushes on issues and pull requests by `[bot]` accounts.
+    // The From address is always notifications@github.com; the sender header names the bot.
+    // Needs LABELLER_TRASH_ENABLED=true. Trash keeps them for 30 days.
     deleteGithubBots: {
       from: github,
       subject: '/^Re:/i',
@@ -77,11 +77,8 @@ export default {
     },
     github: { from: github, label: 'GitHub' },
     npmPublish: { from: 'support@npmjs.com', subject: '/^Successfully (published|staged)/i', label: 'Dev Services' },
-    kucoinPromotions: {
-      from: '@kucoin.com',
-      subject: '/coupon|campaign|gemslot|trading bots|earn up to/i',
-      label: 'Promotions',
-    },
+    // Uses Gmail's category across senders. Other messages fall through to Jev.
+    promotions: { hasLabel: 'CATEGORY_PROMOTIONS', label: 'Promotions' },
   },
 
   // Moves old messages to Trash once a day. Starred messages are kept. Inactive until LABELLER_CLEANUP_ENABLED=true.

@@ -1,16 +1,16 @@
 import { createError, defineEventHandler, getHeader, readBody } from 'h3'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { useServerEnv } from '#vitehub/env/server'
-import { recordSyncRequest, sync } from '../../lib/sync'
+import { sync } from '../../lib/sync'
 
 const googleKeys = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'))
 
-/** Gmail push notification: authenticate, persist, then process history after acknowledging. */
+/** Gmail push notification: authenticate, then process history after acknowledging. */
 export default defineEventHandler(async (event) => {
   const { audience, serviceAccount, subscription } = useServerEnv().pubsub
   if (!audience || !serviceAccount || !subscription) throw createError({ statusCode: 503, message: 'Pub/Sub push is not configured' })
 
-  const token = getHeader(event, 'authorization')?.replace(/^Bearer /, '')
+  const token = getHeader(event, 'authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1]
   if (!token) throw createError({ statusCode: 401, message: 'Missing Pub/Sub token' })
   try {
     const { payload } = await jwtVerify(token, googleKeys, {
@@ -38,7 +38,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Invalid Gmail notification' })
   }
 
-  await recordSyncRequest()
   event.waitUntil(sync().catch(error => console.error('[labeller] sync failed', error)))
   event.res.status = 204
   return null

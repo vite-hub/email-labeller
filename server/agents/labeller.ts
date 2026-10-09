@@ -4,7 +4,7 @@ import { emailSchema, jevLabels, matchRule } from '../lib/labeller'
 
 /**
  * Labels one Gmail message. Rules from `labeller.config.ts` decide first; Jev chooses a label only when no rule matches.
- * The Agent never changes Gmail: the caller applies its output. The Console records one session per email.
+ * The Agent never changes Gmail: the caller applies its output. The local Console records one session per email.
  */
 export default defineAgent({
   description: 'Labels Gmail messages: config rules first, then Jev.',

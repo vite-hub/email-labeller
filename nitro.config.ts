@@ -1,38 +1,28 @@
 import { defineConfig } from 'nitro'
+import { loadEnv } from 'vite'
+
+// Only nonsecret values below enter the generated Worker config.
+const deployment = loadEnv('production', process.cwd(), '')
+const variables = [
+  'EXECUTOR_URL', 'EXECUTOR_GMAIL_CONNECTION',
+  'GMAIL_PUBSUB_TOPIC', 'GMAIL_PUBSUB_SUBSCRIPTION', 'PUBSUB_AUDIENCE', 'PUBSUB_SERVICE_ACCOUNT',
+  'LABELLER_DRY_RUN', 'LABELLER_TRASH_ENABLED', 'LABELLER_CLEANUP_ENABLED', 'LABELLER_MIN_CONFIDENCE',
+]
 
 export default defineConfig({
-  preset: 'cloudflare-module',
-  // Pinned: an unpinned date is the build machine's local date, which Cloudflare rejects when it is ahead of UTC.
   compatibilityDate: '2026-10-01',
   serverDir: 'server',
   cloudflare: {
     wrangler: {
-      account_id: 'ba6e044dfdaaffec3cac45e9feccd237',
-      routes: [{ pattern: 'email-labeller.onmax.me', custom_domain: true }],
-      // Only values that differ from the defaults in vite.config.ts, and values without one.
-      vars: {
-        GMAIL_PUBSUB_TOPIC: 'projects/maxios-gog-mg-20260802/topics/email-labeller-gmail',
-        GMAIL_PUBSUB_SUBSCRIPTION: 'projects/maxios-gog-mg-20260802/subscriptions/email-labeller-gmail-push',
-        PUBSUB_AUDIENCE: 'https://email-labeller.onmax.me/gmail/push',
-        PUBSUB_SERVICE_ACCOUNT: 'email-labeller-push@maxios-gog-mg-20260802.iam.gserviceaccount.com',
-        CF_ACCESS_TEAM_DOMAIN: 'onmax.cloudflareaccess.com',
-        // Audience tag of the "Email labeller Console" Access application.
-        CF_ACCESS_AUD: 'cc04032efa948a3dc79b7494c2919f9d30f9a484ed71cf8e6dc2d8e9a7f8d163',
-        LABELLER_DRY_RUN: 'false',
-        LABELLER_TRASH_ENABLED: 'true',
-        LABELLER_CLEANUP_ENABLED: 'true',
+      ...deployment.CLOUDFLARE_ACCOUNT_ID && { account_id: deployment.CLOUDFLARE_ACCOUNT_ID },
+      ...deployment.CLOUDFLARE_WORKER_DOMAIN && {
+        routes: [{ pattern: deployment.CLOUDFLARE_WORKER_DOMAIN, custom_domain: true }],
       },
-      // `agent.providers.state: 'memory'` removed the unused CHAT_STATE Durable Object. Its first migration
-      // created the class in the deployed Worker, so a second one must delete it.
-      migrations: [
-        { tag: 'vitehub-agent-state-v1', new_sqlite_classes: ['ViteHubAgentStateDO'] },
-        { tag: 'remove-agent-state', deleted_classes: ['ViteHubAgentStateDO'] },
-      ],
-      // ViteHub does not write D1 bindings to Nitro's wrangler.json. The Console stores Agent sessions here too.
-      d1_databases: [{
-        binding: 'DB',
-        database_name: 'email-labeller',
-        database_id: 'd82fb542-7741-4213-bd02-5d1936f615df',
+      vars: Object.fromEntries(variables.flatMap(name => deployment[name] ? [[name, deployment[name]]] : [])),
+      kv_namespaces: [{
+        binding: 'KV',
+        // Local preview works before a namespace is created. `pnpm run deploy` rejects this placeholder.
+        id: deployment.CLOUDFLARE_KV_NAMESPACE_ID || '00000000000000000000000000000000',
       }],
     },
   },

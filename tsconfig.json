@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "nitro.config.ts", "labeller.config.ts", "server/**/*.ts", "test/**/*.ts", ".vitehub/types/**/*.d.ts"]
+  "include": ["vite.config.ts", "nitro.config.ts", "labeller.config.ts", "server/**/*.ts", ".vitehub/types/**/*.d.ts"]
 }

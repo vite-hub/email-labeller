@@ -11,9 +11,9 @@ export interface CleanupResult {
   trashed: boolean
 }
 
-/** Gmail search syntax for a label name: `label:dev-services`, `label:github-bots`. */
+/** Quote names so spaces and nested labels keep their exact meaning. */
 function labelQuery(name: string): string {
-  return `label:${name.toLowerCase().replace(/[\s/]+/g, '-')}`
+  return `label:${JSON.stringify(name)}`
 }
 
 /**
@@ -25,9 +25,12 @@ export async function cleanup(): Promise<CleanupResult[]> {
   const trashed = config.cleanupEnabled && !config.dryRun
   const results: CleanupResult[] = []
   for (const [rule, { label, olderThan }] of Object.entries(config.cleanup ?? {})) {
+    if (!Number.isSafeInteger(olderThan) || olderThan < 1) throw new Error(`Cleanup rule ${rule} needs a positive integer olderThan`)
     const query = `${labelQuery(label)} older_than:${olderThan}d -is:starred -in:trash`
     const messageIds = await gmail.searchMessageIds(query, maxPerRule)
-    if (trashed) await gmail.trashMessages(messageIds)
+    if (trashed) {
+      await gmail.trashMessages(messageIds)
+    }
     results.push({ rule, query, messageIds, trashed })
   }
   return results
