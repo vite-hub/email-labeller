@@ -185,6 +185,16 @@ const watchRenewalMargin = 24 * 60 * 60 * 1000
 export async function renewWatch(): Promise<boolean> {
   const topic = useServerEnv().pubsub.topic
   if (!topic) return false
+  // Capture the cursor before starting Gmail's watch. A message received between
+  // those two operations must remain after the cursor so the first sync can see it.
+  const [historyError, history] = await kv.get<HistoryState>(historyKey)
+  if (historyError) throw historyError
+  if (!history) {
+    const syncedAt = Date.now()
+    const historyId = await gmail.currentHistoryId()
+    const [writeError] = await kv.set(historyKey, { historyId, syncedAt })
+    if (writeError) throw writeError
+  }
   const [readError, expiresAt] = await kv.get<number>(watchExpiryKey)
   if (readError) throw readError
   if (expiresAt && expiresAt - Date.now() > watchRenewalMargin) return true
