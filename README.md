@@ -21,7 +21,7 @@ Cloudflare Cron daily -> optional cleanup by label and age
 - A Cloudflare account and KV namespace for deployment.
 - A Google Cloud Pub/Sub topic and authenticated push subscription for immediate notifications. Five-minute polling also works without a watch.
 
-The project pins a Nitro 3 beta and a ViteHub commit published through `pkg.pr.new`. Keep `pnpm-lock.yaml` and `patches/vite-hub@0.0.4.patch` when copying it. The patch adds the reusable `vite-hub/agent/presets/labeller` preset; it owns Gmail delivery, ordered rules, Jev fallback, and label actions for apps that use ViteHub’s Gmail OAuth client. This template keeps its Executor-backed client and local sync endpoints, so its `labeller.config.ts` remains the only app behavior configuration.
+The project pins a Nitro 3 beta and the ViteHub labeller preset from an immutable `pkg.pr.new` commit. Keep `pnpm-lock.yaml` when copying it. The preset owns Gmail delivery, ordered rules, Jev fallback, and label actions for apps that use ViteHub’s Gmail OAuth client. This template keeps its Executor-backed client and local sync endpoints, so its `labeller.config.ts` remains the only app behavior configuration.
 
 ## Local setup
 
