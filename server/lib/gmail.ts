@@ -37,23 +37,27 @@ export async function currentHistoryId(): Promise<string> {
 /**
  * Returns Inbox messages added after `startHistoryId`, or `expired` when Gmail no longer has that history.
  */
-export async function listNewMessageIds(startHistoryId: string): Promise<{ ids: string[], historyId: string } | 'expired'> {
+export async function listNewMessageIds(startHistoryId: string, maxEntries = 20): Promise<{ ids: string[], historyId: string } | 'expired'> {
   try {
     return await execute(`
 const ids = new Set()
 let pageToken
-let historyId = input
+let historyId = input.startHistoryId
+let entries = 0
 do {
   const page = await call(gmail.history.list({
-    userId: 'me', startHistoryId: input, historyTypes: ['messageAdded'], labelId: 'INBOX', pageToken,
+    userId: 'me', startHistoryId: input.startHistoryId, historyTypes: ['messageAdded'], labelId: 'INBOX', pageToken,
   }))
   for (const entry of page.history ?? []) {
     for (const { message } of entry.messagesAdded ?? []) ids.add(message.id)
+    historyId = entry.id ?? historyId
+    entries++
+    if (entries >= input.maxEntries) return { ids: [...ids], historyId }
   }
   historyId = page.historyId
   pageToken = page.nextPageToken
 } while (pageToken)
-return { ids: [...ids], historyId }`, startHistoryId)
+return { ids: [...ids], historyId }`, { startHistoryId, maxEntries })
   }
   catch (error) {
     if ((error as GmailError).status === 404) return 'expired'
