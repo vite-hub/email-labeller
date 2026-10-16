@@ -24,7 +24,13 @@ export default defineConfig(({ command }) => ({
         subscription: env({ optional: true, source: env.source('GMAIL_PUBSUB_SUBSCRIPTION') }),
       },
       labeller: {
-        adminToken: env({ optional: true, secret: true, source: env.source('LABELLER_ADMIN_TOKEN') }),
+        // Prefer ViteHub's shared secret for admin access. Keep the old name as a
+        // fallback so existing Workers keep accepting their configured token.
+        adminToken: env({
+          optional: true,
+          secret: true,
+          source: env.source(['VITEHUB_SECRET', 'LABELLER_ADMIN_TOKEN'], { skipEmpty: true }),
+        }),
         // Preview decisions without changing Gmail. Set LABELLER_DRY_RUN=false to apply them.
         dryRun: env.boolean({ default: true, source: env.source('LABELLER_DRY_RUN') }),
         // Keep destructive rules disabled until explicitly enabled for future messages.
@@ -48,8 +54,19 @@ export default defineConfig(({ command }) => ({
       kv: { driver: 'cloudflare-kv-binding' },
       // This app has no Channels or hosted chat, so Agents need no durable chat state (no CHAT_STATE Durable Object).
       agent: { providers: { state: { provider: 'memory' } } },
-      // Enable the Console only for the dev server. No deployed SQL journal.
-      console: command === 'serve',
+      // Keep the Console available in production so the ViteHub CLI can run
+      // the manual cleanup schedule through the authenticated Console route.
+      console: command === 'serve'
+        ? true
+        : {
+            access: 'auth',
+            auth: {
+              provider: 'cloudflare-access',
+              teamDomain: env({ default: 'onmax.cloudflareaccess.com', source: env.source('CF_ACCESS_TEAM_DOMAIN') }),
+              audience: env({ default: 'cc04032efa948a3dc79b7494c2919f9d30f9a484ed71cf8e6dc2d8e9a7f8d163', source: env.source('CF_ACCESS_AUD') }),
+            },
+            invoke: true,
+          },
       schedule: true,
       workflow: false,
     }),

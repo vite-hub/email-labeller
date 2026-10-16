@@ -38,8 +38,10 @@ Set these values in `.env`:
 | `EXECUTOR_API_KEY` | Executor API key. |
 | `EXECUTOR_GMAIL_CONNECTION` | Name of the org-owned Gmail connection. |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | Service token if Executor requires Cloudflare Access. |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | Cloudflare Access team domain and Console application audience. The production defaults target the existing Email labeller Console app. |
 | `AI_GATEWAY_API_KEY` | Jev access through Vercel AI Gateway. |
-| `LABELLER_ADMIN_TOKEN` | A long random bearer token for admin endpoints. Missing configuration closes those endpoints. |
+| `VITEHUB_SECRET` | Shared ViteHub secret used as the bearer token for admin endpoints. |
+| `LABELLER_ADMIN_TOKEN` | Compatibility fallback for deployments that still use the old admin token name. Missing both values closes admin endpoints. |
 | `LABELLER_DRY_RUN` | Keep `true` while reviewing decisions. |
 | `LABELLER_TRASH_ENABLED` | Defaults to `false`; gates rule actions with `trash: true`. |
 | `LABELLER_CLEANUP_ENABLED` | Defaults to `false`; independently gates daily cleanup. |
@@ -109,7 +111,7 @@ It uses the same Executor URL, org-owned connection, and optional Access headers
 
 ## Admin endpoints
 
-All endpoints below require `Authorization: Bearer <LABELLER_ADMIN_TOKEN>`.
+All endpoints below require `Authorization: Bearer <VITEHUB_SECRET>`. Deployments that still use `LABELLER_ADMIN_TOKEN` can send that value instead.
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -124,7 +126,15 @@ If your rules archive or trash messages, a live backfill can change the search r
 
 ## Console and stored data
 
-The ViteHub Console is available at `/_vitehub` during `pnpm dev`. It records local Agent sessions in ViteHub's default SQLite journal, which may contain email data. The production Worker does not include the Console or its SQL journal.
+The ViteHub Console is available at `/_vitehub` during `pnpm dev` and at `https://email-labeller.onmax.me/_vitehub` in production through Cloudflare Access. Production Console invocation is enabled for the manual cleanup schedule. The production Worker does not store a SQL journal.
+
+Run the stale-mail cleanup once from the project checkout with the ViteHub CLI:
+
+```sh
+pnpm exec vitehub schedule run cleanup --url https://email-labeller.onmax.me --json
+```
+
+The deployed Console URL must be reachable through Cloudflare Access. Set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` for a service token, or set `VITEHUB_CONSOLE_COOKIE` after signing in through the browser. The daily `0 4 * * *` Cloudflare schedule remains enabled for later runs.
 
 KV stores only two entries, `gmail:history` with the history cursor and its sync timestamp, and `gmail:watch-expiry` with the watch expiration. The Worker does not store message contents or processing decisions. Unmatched email data, including up to 4,000 body characters, goes to Jev through Vercel AI Gateway. Executor handles Gmail credentials and operations.
 
@@ -148,7 +158,7 @@ pnpm typecheck
 
 pnpm exec wrangler secret put EXECUTOR_API_KEY --config .output/server/wrangler.json
 pnpm exec wrangler secret put AI_GATEWAY_API_KEY --config .output/server/wrangler.json
-pnpm exec wrangler secret put LABELLER_ADMIN_TOKEN --config .output/server/wrangler.json
+pnpm exec wrangler secret put VITEHUB_SECRET --config .output/server/wrangler.json
 # Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET too if Executor requires them.
 pnpm run deploy
 ```
