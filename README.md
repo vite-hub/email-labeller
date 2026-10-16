@@ -136,7 +136,7 @@ pnpm exec vitehub schedule run cleanup --url https://email-labeller.onmax.me --j
 
 The deployed Console URL must be reachable through Cloudflare Access. Set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` for a service token, or set `VITEHUB_CONSOLE_COOKIE` after signing in through the browser. The daily `0 4 * * *` Cloudflare schedule remains enabled for later runs.
 
-KV stores only two entries, `gmail:history` with the history cursor and its sync timestamp, and `gmail:watch-expiry` with the watch expiration. The Worker does not store message contents or processing decisions. Unmatched email data, including up to 4,000 body characters, goes to Jev through Vercel AI Gateway. Executor handles Gmail credentials and operations.
+KV stores only three entries: `gmail:history` with the history cursor and its sync timestamp, `gmail:watch-expiry` with the watch expiration, and `gmail:push-sync` with the time of the last push-triggered sync. Push notifications start at most one sync per minute, because every label change on an Inbox message, including the labeller's own, sends another push. The Worker does not store message contents or processing decisions. Unmatched email data, including up to 4,000 body characters, goes to Jev through Vercel AI Gateway. Executor handles Gmail credentials and operations.
 
 ## Cloudflare deployment
 
