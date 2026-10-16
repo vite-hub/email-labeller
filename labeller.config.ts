@@ -16,11 +16,11 @@ export default {
     'GitHub/Bots': { color: { textColor: '#000000', backgroundColor: '#cccccc' } },
 
     'Work': {
-      description: 'Work email from colleagues, clients, and company tools',
+      description: 'Work email from colleagues, clients, and company tools, plus partnership, sponsorship, and consulting requests about your projects',
       color: { textColor: '#000000', backgroundColor: '#fad165' },
     },
     'Jobs': {
-      description: 'Job applications, recruiters, interviews, assessments, and freelance platforms',
+      description: 'Job applications, recruiters, interviews, assessments, and freelance platforms, including their billing and account notices',
       color: { textColor: '#ffffff', backgroundColor: '#8e63ce' },
     },
     'Dev Services': {
@@ -44,7 +44,7 @@ export default {
       color: { textColor: '#ffffff', backgroundColor: '#2da2bb' },
     },
     'Events': {
-      description: 'Reservations and tickets outside travel, meetups, conferences, webinars, and event invitations or follow-ups',
+      description: 'Reservations, visits, and tickets outside travel, such as restaurants, meetups, conferences, webinars, and research or study sessions, plus their invitations and follow-ups',
       color: { textColor: '#ffffff', backgroundColor: '#e07798' },
     },
     'Newsletters': {
@@ -55,8 +55,12 @@ export default {
       description: 'Marketing, promotions, discounts, coupons, campaigns, and win-back emails, including from banks, crypto exchanges, and services you use',
       color: { textColor: '#666666', backgroundColor: '#efefef' },
     },
+    'Accounts': {
+      description: 'Account notices from everyday apps and Google: storage almost full, data exports, welcome and sign-up emails, profile or business listing reports, and inactive-account warnings. Not security alerts or developer tools',
+      color: { textColor: '#ffffff', backgroundColor: '#999999' },
+    },
     'Personal': {
-      description: 'Friends, family, notes to self, lessons, housing, and government matters',
+      description: 'Friends and family, including things they forward, notes to self, classes and courses you take, clubs and memberships, housing queues and rent, and government or tax matters',
       color: { textColor: '#000000', backgroundColor: '#b99aff' },
     },
   },
