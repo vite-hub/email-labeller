@@ -1,0 +1,31 @@
+# Email labeller
+
+Labels Maxi's Gmail (maximogarciamtnez@gmail.com) on a Cloudflare Worker at https://email-labeller.onmax.me. Production runs live, with trash and cleanup enabled.
+
+## Rules
+
+- Jev decides labels. Never pick labels by hand. If Jev gets something wrong, improve the label descriptions in `labeller.config.ts`.
+- Change Gmail through the Worker's admin endpoints, not directly. They apply the same rules and Jev as production.
+- Gmail allows a limited number of API calls per minute, shared with the live Worker. Send work in batches and wait when you get a 403.
+
+## Access
+
+- `.env` (gitignored) has the production settings and `VITEHUB_SECRET`, the bearer token for `/api/*`.
+- Executor (`tools.gmail.org.personalGmail`) gives direct Gmail access, but only for reads.
+- Cloudflare (Executor `tools.cloudflare`) manages Worker secrets. Secret values can't be read back. To rotate the token, set the same new value for `VITEHUB_SECRET` and `LABELLER_ADMIN_TOKEN`, then update `.env`.
+- CI deploys are skipped (`DEPLOY_ENABLED` is off). Deploy by hand with `pnpm build && pnpm run deploy` after loading `.env`. `wrangler versions upload --config .output/server/wrangler.json` checks Worker startup without going live.
+- `patches/vite-hub@0.0.4.patch` keeps the Console journal in memory on Workers. Without it, startup fails because libsql rejects `file:` URLs. Check it still applies after updating `vite-hub`.
+
+## Common tasks
+
+```sh
+set -a; . ./.env; set +a
+api() { curl -s -X POST "https://email-labeller.onmax.me/api/$1" -H "authorization: Bearer $VITEHUB_SECRET" -H 'content-type: application/json' -d "${2:-{\}}"; }
+
+api preview  '{"query":"in:inbox","max":10}'                 # read-only
+api backfill '{"query":"in:inbox has:nouserlabels","max":100}' # repeat with pageToken
+api backfill '{"ids":["..."],"relabel":true}'                  # let Jev redo labels
+api cleanup                                                    # trash old labelled mail
+```
+
+See `README.md` for setup, rules syntax, and deployment.
