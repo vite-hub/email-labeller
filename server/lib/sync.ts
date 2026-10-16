@@ -183,8 +183,11 @@ const watchRenewalMargin = 24 * 60 * 60 * 1000
 
 /** Starts or renews the Gmail push watch when it expires within a day. */
 export async function renewWatch(): Promise<boolean> {
-  const topic = useServerEnv().pubsub.topic
-  if (!topic) return false
+  const { topic, audience, serviceAccount, subscription } = useServerEnv().pubsub
+  // Do not start a Gmail watch unless the push endpoint can authenticate and
+  // validate the notification. With only a topic configured, Gmail would send
+  // notifications that the worker must reject, while polling would still work.
+  if (!topic || !audience || !serviceAccount || !subscription) return false
   // Capture the cursor before starting Gmail's watch. A message received between
   // those two operations must remain after the cursor so the first sync can see it.
   const [historyError, history] = await kv.get<HistoryState>(historyKey)

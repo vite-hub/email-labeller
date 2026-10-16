@@ -13,6 +13,13 @@ export default defineSchedule({
     catch (error) {
       console.error('[labeller] watch renewal failed', error)
     }
-    await sync()
+    try {
+      await sync()
+    }
+    catch (error) {
+      // Leave the cursor unchanged so the next five-minute run retries the
+      // same work. A failed cron invocation must not stop future recovery.
+      console.error('[labeller] scheduled sync failed', error)
+    }
   },
 })
