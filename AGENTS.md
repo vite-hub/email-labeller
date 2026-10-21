@@ -22,6 +22,8 @@ Labels Maxi's Gmail (maximogarciamtnez@gmail.com) on a Cloudflare Worker at http
 set -a; . ./.env; set +a
 api() { curl -s -X POST "https://email-labeller.onmax.me/api/$1" -H "authorization: Bearer $VITEHUB_SECRET" -H 'content-type: application/json' -d "${2:-{\}}"; }
 
+curl -s https://email-labeller.onmax.me/api/health -H "authorization: Bearer $VITEHUB_SECRET"  # 503 while sync fails; shows the error and skipped messages
+api sync                                                       # repeat while it returns "more": true
 api preview  '{"query":"in:inbox","max":10}'                 # read-only
 api backfill '{"query":"in:inbox has:nouserlabels","max":100}' # repeat with pageToken
 api backfill '{"ids":["..."],"relabel":true}'                  # let Jev redo labels

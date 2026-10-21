@@ -36,8 +36,9 @@ export async function currentHistoryId(): Promise<string> {
 
 /**
  * Returns Inbox messages added after `startHistoryId`, or `expired` when Gmail no longer has that history.
+ * `more` is true when the read stopped at `maxEntries` and later history may remain.
  */
-export async function listNewMessageIds(startHistoryId: string, maxEntries = 20): Promise<{ ids: string[], historyId: string } | 'expired'> {
+export async function listNewMessageIds(startHistoryId: string, maxEntries = 20): Promise<{ ids: string[], historyId: string, more: boolean } | 'expired'> {
   try {
     return await execute(`
 const ids = new Set()
@@ -52,12 +53,12 @@ do {
     for (const { message } of entry.messagesAdded ?? []) ids.add(message.id)
     historyId = entry.id ?? historyId
     entries++
-    if (entries >= input.maxEntries) return { ids: [...ids], historyId }
+    if (entries >= input.maxEntries) return { ids: [...ids], historyId, more: true }
   }
   historyId = page.historyId
   pageToken = page.nextPageToken
 } while (pageToken)
-return { ids: [...ids], historyId }`, { startHistoryId, maxEntries })
+return { ids: [...ids], historyId, more: false }`, { startHistoryId, maxEntries })
   }
   catch (error) {
     if ((error as GmailError).status === 404) return 'expired'
@@ -108,18 +109,36 @@ function toText(parts: RawPart[]): string {
     .replace(/&amp;/g, '&')
 }
 
-/** Fetches messages and resolves label IDs to names. Deleted messages are skipped. */
-export async function getEmails(ids: string[], labels: Label[]): Promise<Email[]> {
-  if (!ids.length) return []
-  const raw = await execute<(RawMessage | null)[]>(`
+/** A message that could not be fetched or decided. Other messages in its batch continue. */
+export interface MessageFailure {
+  messageId: string
+  error: string
+}
+
+/**
+ * Fetches messages and resolves label IDs to names. Deleted messages are skipped.
+ * A message that fails alone is returned in `failed`. Quota errors fail the whole call.
+ */
+export async function getEmails(ids: string[], labels: Label[]): Promise<{ emails: Email[], failed: MessageFailure[] }> {
+  if (!ids.length) return { emails: [], failed: [] }
+  const raw = await execute<(RawMessage | MessageFailure | null)[]>(`
 function textParts(part, out = []) {
   if (part.mimeType?.startsWith('text/') && part.body?.data) out.push({ mimeType: part.mimeType, data: part.body.data })
   for (const child of part.parts ?? []) textParts(child, out)
   return out
 }
+async function get(id) {
+  try {
+    return await call(gmail.messages.get({ userId: 'me', id, format: 'full' }))
+  } catch (error) {
+    // Executor rejects tool results over 100 KB. Label large messages from headers and snippet.
+    if (!/output limit/i.test(error.message)) throw error
+    return call(gmail.messages.get({ userId: 'me', id, format: 'metadata' }))
+  }
+}
 return Promise.all(input.map(async (id) => {
   try {
-    const message = await call(gmail.messages.get({ userId: 'me', id, format: 'full' }))
+    const message = await get(id)
     return {
       id: message.id,
       threadId: message.threadId,
@@ -130,13 +149,22 @@ return Promise.all(input.map(async (id) => {
     }
   } catch (error) {
     if (error.status === 404) return null
-    throw error
+    // Quota errors affect every message. Retry the whole batch later.
+    if (error.status === 403 || error.status === 429) throw error
+    return { messageId: id, error: String(error.message) }
   }
 }))`, ids)
   const names = new Map(labels.map(label => [label.id, label.name]))
-  return raw.filter(message => message !== null).map((message) => {
+  const emails: Email[] = []
+  const failed: MessageFailure[] = []
+  for (const message of raw) {
+    if (message === null) continue
+    if ('error' in message) {
+      failed.push(message)
+      continue
+    }
     const headers = Object.fromEntries(message.headers.map(({ name, value }) => [name.toLowerCase(), value]))
-    return {
+    emails.push({
       id: message.id,
       threadId: message.threadId,
       from: headers.from ?? '',
@@ -147,8 +175,9 @@ return Promise.all(input.map(async (id) => {
       listId: headers['list-id'] ?? '',
       labels: (message.labelIds ?? []).map(id => names.get(id) ?? id),
       headers,
-    }
-  })
+    })
+  }
+  return { emails, failed }
 }
 
 export interface Change {

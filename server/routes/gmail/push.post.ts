@@ -2,7 +2,7 @@ import { createError, defineEventHandler, getHeader, readBody } from 'h3'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { useServerEnv } from '#vitehub/env/server'
 import { kv } from 'vite-hub/kv'
-import { sync } from '../../lib/sync'
+import { describeError, sync } from '../../lib/sync'
 
 const googleKeys = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'))
 const pushSyncKey = 'gmail:push-sync'
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
   const [readError, lastSync] = await kv.get<number>(pushSyncKey)
   if (readError || !lastSync || Date.now() - lastSync >= pushSyncInterval) {
     await kv.set(pushSyncKey, Date.now())
-    event.waitUntil(sync().catch(error => console.error('[labeller] sync failed', error)))
+    event.waitUntil(sync().catch(error => console.error('[labeller] sync failed:', describeError(error))))
   }
   event.res.status = 204
   return null

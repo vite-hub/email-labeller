@@ -17,10 +17,11 @@ const bodySchema = v.object({
 /**
  * Runs the labeller on existing messages from a Gmail search, one page per request, or on up to 100 given IDs.
  * Every call decides messages again. `relabel` also replaces their managed labels.
+ * `failed` lists messages that could not be fetched or decided. Retry them with `ids`.
  */
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const { query, max, pageToken, ids, relabel } = await readValidatedBody(event, body => v.parse(bodySchema, body ?? {}))
   const page = ids ? { ids, nextPageToken: undefined } : await gmail.searchMessagePage(query, max, pageToken)
-  return { decisions: await processMessages(page.ids, { relabel }), nextPageToken: page.nextPageToken }
+  return { ...await processMessages(page.ids, { relabel }), nextPageToken: page.nextPageToken }
 })

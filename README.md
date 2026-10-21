@@ -115,9 +115,11 @@ All endpoints below require `Authorization: Bearer <VITEHUB_SECRET>`. Deployment
 
 | Endpoint | Behavior |
 | --- | --- |
-| `POST /api/preview` | Read-only message preview. Accepts `query` and `max`, from 1 to 50. |
-| `POST /api/sync` | Renew the watch if configured, then process messages since the saved cursor. |
-| `POST /api/backfill` | Process one search page with `query`, `max` up to 100, and optional `pageToken`, or explicit `ids` up to 100. Returns `nextPageToken`. |
+| `POST /api/preview` | Read-only message preview. Accepts `query` and `max`, from 1 to 50. Returns `decisions` and `failed`. |
+| `POST /api/sync` | Renew the watch if configured, then process messages since the saved cursor for up to two minutes. Returns `decisions`, `failed` (messages skipped in this call), and `more`. Call again while `more` is `true`. |
+| `POST /api/backfill` | Process one search page with `query`, `max` up to 100, and optional `pageToken`, or explicit `ids` up to 100. Returns `decisions`, `failed`, and `nextPageToken`. |
+
+`GET /api/health` needs no token. It returns `status`, `syncedAt` (the last sync that moved the cursor), and the current failure streak, and responds with 503 after two failed syncs in a row. With the admin token, it also returns the last error and the messages that sync skipped.
 | `POST /api/cleanup` | Run cleanup now. Returns a preview while dry-run mode is on or cleanup is disabled. |
 
 Pass `nextPageToken` back as `pageToken` until absent when backfilling. Every call decides messages again. Set `relabel: true` to also remove other managed labels. Dry-run backfill returns decisions without changing Gmail. Once you switch to live mode, run backfill again for messages you want to apply. Changing rules alone does not revisit earlier mail.
@@ -136,7 +138,7 @@ pnpm exec vitehub schedule run cleanup --url https://email-labeller.onmax.me --j
 
 The deployed Console URL must be reachable through Cloudflare Access. Set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` for a service token, or set `VITEHUB_CONSOLE_COOKIE` after signing in through the browser. The daily `0 4 * * *` Cloudflare schedule remains enabled for later runs.
 
-KV stores only three entries: `gmail:history` with the history cursor and its sync timestamp, `gmail:watch-expiry` with the watch expiration, and `gmail:push-sync` with the time of the last push-triggered sync. Push notifications start at most one sync per minute, because every label change on an Inbox message, including the labeller's own, sends another push. The Worker does not store message contents or processing decisions. Unmatched email data, including up to 4,000 body characters, goes to Jev through Vercel AI Gateway. Executor handles Gmail credentials and operations.
+KV stores only four entries: `gmail:history` with the history cursor and its sync timestamp, `gmail:watch-expiry` with the watch expiration, `gmail:push-sync` with the time of the last push-triggered sync, and `gmail:sync-status` with the current failure streak, retry counts, and skipped messages. Sync writes the status only when it changes. Push notifications start at most one sync per minute, because every label change on an Inbox message, including the labeller's own, sends another push. The Worker does not store message contents or processing decisions. Unmatched email data, including up to 4,000 body characters, goes to Jev through Vercel AI Gateway. Executor handles Gmail credentials and operations.
 
 ## Cloudflare deployment
 
@@ -203,11 +205,11 @@ corepack pnpm typecheck
 
 This app manages one mailbox with best-effort processing. Sync calls in the same Worker isolate are coalesced, but other isolates and manual backfills can overlap. KV is eventually consistent and has no atomic lock. Concurrent or failed runs can repeat processing, overwrite a cursor with an older value, or call the model again with a different result. Label additions and removals are repeatable, but a new decision can add a different label. This template accepts those tradeoffs for a small mailbox.
 
-The cursor advances only after the full batch succeeds, including in dry-run mode. A failed Gmail operation or cursor write leaves work for a later retry. No decision journal or replay endpoint is kept. Use backfill to revisit messages after changing rules or switching from dry-run to live mode.
+The cursor advances only after the batch succeeds, including in dry-run mode. A failed Gmail operation or cursor write leaves work for a later retry. A message that fails alone, because Gmail cannot return it or Jev fails, does not stop the others. Sync tries it three times, then skips it so later mail is not blocked, and lists it in `/api/health`. Use backfill with its ID to try again. Messages too large for Executor's 100 KB result limit are decided from their headers and snippet. No decision journal or replay endpoint is kept. Use backfill to revisit messages after changing rules or switching from dry-run to live mode.
 
 When Gmail history expires, recovery searches Inbox messages received since the last saved sync timestamp, collects every page, then processes them before advancing the cursor. Initial setup starts from Gmail's current cursor. Imported older messages or messages outside Inbox can need explicit backfill.
 
-The project uses a Nitro beta and the latest ViteHub package published through `pkg.pr.new`, locked in `pnpm-lock.yaml`. Use `pnpm build` and `pnpm typecheck` before deploying. After deployment, check `/api/health` and use `/api/preview` to verify your Executor connection and rules without changing Gmail.
+The project uses a Nitro beta and the latest ViteHub package published through `pkg.pr.new`, locked in `pnpm-lock.yaml`. Use `pnpm build` and `pnpm typecheck` before deploying. The build enables Workers Logs, so sync errors stay searchable in the Cloudflare dashboard. After deployment, check `/api/health` and use `/api/preview` to verify your Executor connection and rules without changing Gmail.
 
 ## License
 

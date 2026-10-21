@@ -19,6 +19,8 @@ export default defineConfig({
       ...deployment.CLOUDFLARE_WORKER_DOMAIN && {
         routes: [{ pattern: deployment.CLOUDFLARE_WORKER_DOMAIN, custom_domain: true }],
       },
+      // Workers Logs keeps console output searchable in the dashboard and through the API.
+      observability: { enabled: true },
       vars: Object.fromEntries(variables.flatMap(name => deployment[name] ? [[name, deployment[name]]] : [])),
       kv_namespaces: [{
         binding: 'KV',

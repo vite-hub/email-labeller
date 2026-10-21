@@ -2,7 +2,7 @@ import { defineEventHandler, readValidatedBody } from 'h3'
 import * as v from 'valibot'
 import { requireAdmin } from '../lib/admin'
 import * as gmail from '../lib/gmail'
-import { decide } from '../lib/sync'
+import { decide, describeError } from '../lib/sync'
 
 const bodySchema = v.object({
   query: v.optional(v.string(), 'in:inbox'),
@@ -13,6 +13,13 @@ const bodySchema = v.object({
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const { query, max } = await readValidatedBody(event, body => v.parse(bodySchema, body ?? {}))
-  const emails = await gmail.getEmails(await gmail.searchMessageIds(query, max), await gmail.listLabels())
-  return Promise.all(emails.map(decide))
+  const { emails, failed } = await gmail.getEmails(await gmail.searchMessageIds(query, max), await gmail.listLabels())
+  const results = await Promise.allSettled(emails.map(decide))
+  return {
+    decisions: results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []),
+    failed: [
+      ...failed,
+      ...results.flatMap((result, index) => result.status === 'rejected' ? [{ messageId: emails[index]!.id, error: describeError(result.reason) }] : []),
+    ],
+  }
 })
