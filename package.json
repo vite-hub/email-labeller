@@ -16,17 +16,17 @@
   },
   "dependencies": {
     "advocaat": "^0.0.6",
-    "h3": "2.0.1-rc.31",
-    "jose": "^6.2.12",
+    "h3": "2.0.8",
+    "jose": "^6.2.13",
     "nitro": "3.0.260903-beta",
     "valibot": "^1.5.0",
-    "vite": "^8.2.2",
-    "vite-hub": "https://pkg.pr.new/vite-hub/vitehub/vite-hub@097d8f3afa41db3f7d802e68b91deaec329388be"
+    "vite": "^8.3.5",
+    "vite-hub": "https://pkg.pr.new/vite-hub/vitehub/vite-hub@2e64c4f156bd25dfe5fd7e066c05ecfbd55e46a4"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.3",
-    "wrangler": "^4.147.0"
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.152.0"
   },
   "license": "MIT"
 }
