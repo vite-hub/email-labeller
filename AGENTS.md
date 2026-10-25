@@ -14,7 +14,7 @@ Labels Maxi's Gmail (maximogarciamtnez@gmail.com) on a Cloudflare Worker at http
 - Executor (`tools.gmail.org.personalGmail`) gives direct Gmail access, but only for reads.
 - Cloudflare (Executor `tools.cloudflare`) manages Worker secrets. Secret values can't be read back. To rotate the token, set the same new value for `VITEHUB_SECRET` and `LABELLER_ADMIN_TOKEN`, then update `.env`.
 - CI deploys are skipped (`DEPLOY_ENABLED` is off). Deploy by hand with `pnpm build && pnpm run deploy` after loading `.env`. `wrangler versions upload --config .output/server/wrangler.json` checks Worker startup without going live.
-- `patches/vite-hub@0.0.4.patch` keeps the Console journal in memory on Workers. Without it, startup fails because libsql rejects `file:` URLs. Check it still applies after updating `vite-hub`.
+- ViteHub keeps the Console journal in memory on Workers. Verify Worker startup after upgrading: libsql rejects `file:` URLs if this fallback regresses.
 
 ## Common tasks
 

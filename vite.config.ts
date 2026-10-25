@@ -57,9 +57,8 @@ export default defineConfig(({ command }) => ({
       // Keep the Console available in production so the ViteHub CLI can run
       // the manual cleanup schedule through the authenticated Console route.
       console: command === 'serve'
-        ? true
+        ? { auth: false }
         : {
-            access: 'auth',
             auth: {
               provider: 'cloudflare-access',
               teamDomain: env({ default: 'onmax.cloudflareaccess.com', source: env.source('CF_ACCESS_TEAM_DOMAIN') }),

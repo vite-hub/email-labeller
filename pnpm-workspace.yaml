@@ -2,7 +2,3 @@ packages:
   - .
 
 blockExoticSubdeps: false
-patchedDependencies:
-  '@vite-hub/agent@0.0.4': patches/@vite-hub__agent@0.0.4.patch
-  '@vite-hub/schedule@0.0.4': patches/@vite-hub__schedule@0.0.4.patch
-  vite-hub@0.0.4: patches/vite-hub@0.0.4.patch
