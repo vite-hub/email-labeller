@@ -27,7 +27,7 @@ Gmail access goes through [Executor](https://github.com/UsefulSoftwareCo/executo
 
 ## Setup
 
-You need Node.js 24.15+, pnpm, an Executor instance with an org-owned Gmail connection, a Vercel AI Gateway key with access to `typesafe-ai/jev`, and a Cloudflare account.
+You need Node.js 24.15+, pnpm, an Executor v2 instance with an org-owned Gmail account and a personal access token, a Vercel AI Gateway key with access to `typesafe-ai/jev`, and a Cloudflare account.
 
 ```sh
 corepack pnpm install --frozen-lockfile

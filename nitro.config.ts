@@ -4,7 +4,7 @@ import { loadEnv } from 'vite'
 // Only nonsecret values below enter the generated Worker config.
 const deployment = loadEnv('production', process.cwd(), '')
 const variables = [
-  'EXECUTOR_URL', 'EXECUTOR_GMAIL_CONNECTION',
+  'EXECUTOR_URL', 'EXECUTOR_GMAIL_ACCOUNT',
   'CF_ACCESS_TEAM_DOMAIN', 'CF_ACCESS_AUD',
   'GMAIL_PUBSUB_TOPIC', 'GMAIL_PUBSUB_SUBSCRIPTION', 'PUBSUB_AUDIENCE', 'PUBSUB_SERVICE_ACCOUNT',
   'LABELLER_DRY_RUN', 'LABELLER_TRASH_ENABLED', 'LABELLER_CLEANUP_ENABLED', 'LABELLER_MIN_CONFIDENCE',

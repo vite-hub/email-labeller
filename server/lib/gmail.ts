@@ -10,7 +10,7 @@ function execute<T>(body: string, input: unknown, options: { write?: boolean } =
   return runExecutor<T>({
     url: executor.url,
     apiKey: executor.apiKey.unseal(),
-    connection: executor.connection,
+    account: executor.account,
     accessClientId: executor.accessClientId?.unseal(),
     accessClientSecret: executor.accessClientSecret?.unseal(),
   }, body, input, options)
@@ -23,15 +23,15 @@ export interface Label {
 }
 
 export async function listLabels(): Promise<Label[]> {
-  return execute(`return (await call(gmail.labels.list({ userId: 'me' }))).labels ?? []`, null)
+  return execute(`return (await call(gmail.labels.list, { path: { userId: 'me' } })).labels ?? []`, null)
 }
 
 export async function createLabel(name: string): Promise<Label> {
-  return execute(`return call(gmail.labels.create({ userId: 'me', body: { name: input } }))`, name, { write: true })
+  return execute(`return call(gmail.labels.create, { path: { userId: 'me' }, body: { name: input } })`, name, { write: true })
 }
 
 export async function currentHistoryId(): Promise<string> {
-  return execute(`return (await call(gmail.getProfile({ userId: 'me' }))).historyId`, null)
+  return execute(`return (await call(gmail.getProfile, { path: { userId: 'me' } })).historyId`, null)
 }
 
 /**
@@ -46,9 +46,10 @@ let pageToken
 let historyId = input.startHistoryId
 let entries = 0
 do {
-  const page = await call(gmail.history.list({
-    userId: 'me', startHistoryId: input.startHistoryId, historyTypes: ['messageAdded'], labelId: 'INBOX', pageToken,
-  }))
+  const page = await call(gmail.history.list, {
+    path: { userId: 'me' },
+    query: { startHistoryId: input.startHistoryId, historyTypes: ['messageAdded'], labelId: 'INBOX', pageToken },
+  })
   for (const entry of page.history ?? []) {
     for (const { message } of entry.messagesAdded ?? []) ids.add(message.id)
     historyId = entry.id ?? historyId
@@ -73,7 +74,7 @@ export async function searchMessageIds(query: string, max: number): Promise<stri
 /** One page of a Gmail search. Pass `nextPageToken` back to read the next page. */
 export async function searchMessagePage(query: string, max: number, pageToken?: string): Promise<{ ids: string[], nextPageToken?: string }> {
   return execute(`
-const page = await call(gmail.messages.list({ userId: 'me', q: input.query, maxResults: input.max, pageToken: input.pageToken }))
+const page = await call(gmail.messages.list, { path: { userId: 'me' }, query: { q: input.query, maxResults: input.max, pageToken: input.pageToken } })
 return { ids: (page.messages ?? []).map(message => message.id), nextPageToken: page.nextPageToken }`, { query, max, pageToken })
 }
 
@@ -92,6 +93,7 @@ interface RawMessage {
 }
 
 const maxBodyLength = 4000
+const maxCallsPerRun = 90
 
 function decodeBase64Url(data: string): string {
   return Buffer.from(data, 'base64url').toString('utf8')
@@ -129,11 +131,11 @@ function textParts(part, out = []) {
 }
 async function get(id) {
   try {
-    return await call(gmail.messages.get({ userId: 'me', id, format: 'full' }))
+    return await call(gmail.messages.get, { path: { userId: 'me', id }, query: { format: 'full' } })
   } catch (error) {
-    // Executor rejects tool results over 100 KB. Label large messages from headers and snippet.
-    if (!/output limit/i.test(error.message)) throw error
-    return call(gmail.messages.get({ userId: 'me', id, format: 'metadata' }))
+    // A result too large for Executor to return: label the message from its headers and snippet.
+    if (!/output limit|too large/i.test(error.message)) throw error
+    return call(gmail.messages.get, { path: { userId: 'me', id }, query: { format: 'metadata' } })
   }
 }
 return Promise.all(input.map(async (id) => {
@@ -193,9 +195,9 @@ export async function applyChanges(changes: Change[]): Promise<void> {
 await Promise.all(input.map(async ({ id, addLabelIds, removeLabelIds, trash }) => {
   try {
     if (addLabelIds.length || removeLabelIds.length) {
-      await call(gmail.messages.modify({ userId: 'me', id, body: { addLabelIds, removeLabelIds } }))
+      await call(gmail.messages.modify, { path: { userId: 'me', id }, body: { addLabelIds, removeLabelIds } })
     }
-    if (trash) await call(gmail.messages.trash({ userId: 'me', id }))
+    if (trash) await call(gmail.messages.trash, { path: { userId: 'me', id } })
   } catch (error) {
     // A deleted message must not block the history cursor forever.
     if (error.status !== 404) throw error
@@ -206,14 +208,16 @@ await Promise.all(input.map(async ({ id, addLabelIds, removeLabelIds, trash }) =
 /** Starts or renews Gmail push notifications for the Inbox. */
 export async function watch(topicName: string): Promise<{ historyId: string, expiration: string }> {
   return execute(`
-return call(gmail.watch({ userId: 'me', body: { topicName: input, labelIds: ['INBOX'], labelFilterBehavior: 'include' } }))`, topicName, { write: true })
+return call(gmail.watch, { path: { userId: 'me' }, body: { topicName: input, labelIds: ['INBOX'], labelFilterBehavior: 'include' } })`, topicName, { write: true })
 }
 
 /** Moves messages to Trash. Gmail deletes them after 30 days. */
 export async function trashMessages(ids: string[]): Promise<void> {
-  if (!ids.length) return
-  await execute(`
+  // One Executor program makes at most 100 tool calls.
+  for (let start = 0; start < ids.length; start += maxCallsPerRun) {
+    await execute(`
 for (let start = 0; start < input.length; start += 10) {
-  await Promise.all(input.slice(start, start + 10).map(id => call(gmail.messages.trash({ userId: 'me', id }))))
-}`, ids, { write: true })
+  await Promise.all(input.slice(start, start + 10).map(id => call(gmail.messages.trash, { path: { userId: 'me', id } })))
+}`, ids.slice(start, start + maxCallsPerRun), { write: true })
+  }
 }

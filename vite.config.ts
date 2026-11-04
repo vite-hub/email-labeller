@@ -12,7 +12,8 @@ export default defineConfig(({ command }) => ({
       executor: {
         url: env({ default: 'https://executor.onmax.me', source: env.source('EXECUTOR_URL') }),
         apiKey: env({ secret: true, source: env.source('EXECUTOR_API_KEY') }),
-        connection: env({ default: 'gmail', source: env.source('EXECUTOR_GMAIL_CONNECTION') }),
+        // Executor v2 account ID of the Gmail account, `acc_…`
+        account: env({ source: env.source('EXECUTOR_GMAIL_ACCOUNT') }),
         // Cloudflare Access service token for the public Executor URL. Not needed for the local URL.
         accessClientId: env({ optional: true, secret: true, source: env.source('CF_ACCESS_CLIENT_ID') }),
         accessClientSecret: env({ optional: true, secret: true, source: env.source('CF_ACCESS_CLIENT_SECRET') }),
