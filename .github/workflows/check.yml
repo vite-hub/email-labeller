@@ -22,3 +22,4 @@ jobs:
       # The build generates .vitehub/types, which typecheck reads.
       - run: pnpm build
       - run: pnpm typecheck
+      - run: pnpm test
