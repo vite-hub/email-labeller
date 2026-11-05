@@ -25,11 +25,18 @@ const messages = fixtures.map(([id, from, subject, headers]) => ({
 const tool = (name, handler) => async ({ accountId, input }) => {
   assert.equal(accountId, 'acc_fixture')
   calls.push(name)
+  checkQuery(input.query)
   return handler(input)
+}
+// Executor validates Gmail query params against the tool schema: repeated params are arrays, flags are booleans.
+const checkQuery = (query = {}) => {
+  for (const key of ['historyTypes', 'labelIds', 'metadataHeaders']) if (key in query) assert.ok(Array.isArray(query[key]), `${key} must be an array`)
+  if ('includeSpamTrash' in query) assert.equal(typeof query.includeSpamTrash, 'boolean')
 }
 const forbidden = name => tool(name, () => { throw new Error(`Unexpected Gmail mutation: ${name}`) })
 const tools = { gmail: { gmail: { users: {
   getProfile: tool('profile.get', () => ({ emailAddress: 'fixture@example.com', historyId: '1' })),
+  history: { list: tool('history.list', () => ({ historyId: '2', history: [] })) },
   labels: { list: tool('labels.list', () => ({ labels })), get: tool('labels.get', ({ path }) => labels.find(label => label.id === path.id)),
     create: forbidden('labels.create'), patch: forbidden('labels.patch') },
   messages: {
@@ -129,6 +136,8 @@ test('disabled cleanup returns the upstream preview without trashing messages', 
 
 test('health reads Channel state and keeps errors and message IDs private', async () => {
   assert.equal((await api('sync', {})).synced, true)
+  assert.equal((await api('sync', {})).synced, true)
+  assert.ok(calls.includes('history.list'))
   const publicResponse = await fetch(`${base}/api/health`)
   assert.equal(publicResponse.status, 200, logs)
   const health = await publicResponse.json()

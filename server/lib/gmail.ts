@@ -2,6 +2,19 @@ import { useServerEnv } from '#vitehub/env/server'
 import type { GmailClient } from 'vite-hub/agent/channels'
 import { execute } from './executor'
 
+const arrayParams = new Set(['historyTypes', 'labelIds', 'metadataHeaders'])
+const booleanParams = new Set(['includeSpamTrash'])
+
+/** ViteHub sends REST query strings; Executor validates repeated params as arrays and flags as booleans. */
+export function toToolQuery(query?: Record<string, unknown>) {
+  if (!query) return query
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined).map(([key, value]) => {
+    if (arrayParams.has(key) && !Array.isArray(value)) return [key, [value]]
+    if (booleanParams.has(key) && typeof value === 'string') return [key, value === 'true']
+    return [key, value]
+  }))
+}
+
 /** Adapt ViteHub's REST requests to the Executor v2 Gmail tools. */
 export const gmailClient: GmailClient = async (request) => {
   const { executor } = useServerEnv()
@@ -40,5 +53,5 @@ catch (error) {
   if (resource !== 'messages' || action || !id || !/output limit|too large/i.test(error.message)) throw error
   return call(gmail.messages.get, { ...request, query: { format: 'metadata' } })
 }
-`, request, { write: request.method !== 'GET' })
+`, { ...request, query: toToolQuery(request.query) }, { write: request.method !== 'GET' })
 }
