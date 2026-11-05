@@ -1,15 +1,12 @@
-import { useServerEnv } from '#vitehub/env/server'
 import { defineSchedule } from 'vite-hub/schedule'
 import { cleanup } from '../lib/cleanup'
+import { settings } from '../lib/settings'
 
-/** Applies `cleanup` rules once a day. Nothing moves to Trash while cleanup is disabled. */
 export default defineSchedule({
   cron: '0 4 * * *',
-  // Allow `vitehub schedule run cleanup --url ...` for the initial stale-mail pass.
   manual: true,
   async handler() {
-    const { cleanupEnabled, dryRun } = useServerEnv().labeller
-    if (!cleanupEnabled || dryRun) return
+    if (!settings.LABELLER_CLEANUP_ENABLED || settings.LABELLER_DRY_RUN) return
     await cleanup()
   },
 })

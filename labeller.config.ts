@@ -1,10 +1,10 @@
-import type { LabellerConfig } from './server/lib/labeller.ts'
+import type { LabellerOptions } from 'vite-hub/presets/labeller'
 
 const github = 'notifications@github.com'
 
 /**
- * What the labeller does with new Inbox messages. `vite.config.ts` passes it to `env.server.labeller`, and
- * `pnpm labels:sync` applies `labels` to Gmail.
+ * Rules and label descriptions for the ViteHub labeller preset.
+ * `pnpm labels:sync` applies label settings through the admin API.
  */
 export default {
   // Gmail labels this app manages. A label with a description is available to Jev when no rule matches.
@@ -80,7 +80,8 @@ export default {
       trash: true,
     },
     github: { from: github, label: 'GitHub' },
-    npmPublish: { from: 'support@npmjs.com', subject: '/^Successfully (published|staged)/i', label: 'Dev Services' },
+    npmPublish: { from: 'support@npmjs.com', subject: '/^Successfully published/i', label: 'Dev Services' },
+    npmStage: { from: 'support@npmjs.com', subject: '/^Successfully staged/i', label: 'Dev Services' },
     // Uses Gmail's category across senders. Other messages fall through to Jev.
     promotions: { hasLabel: 'CATEGORY_PROMOTIONS', label: 'Promotions' },
   },
@@ -90,4 +91,4 @@ export default {
     promotions: { label: 'Promotions', olderThan: 14 },
     security: { label: 'Security', olderThan: 30 },
   },
-} satisfies LabellerConfig
+} satisfies Pick<LabellerOptions, 'labels' | 'rules' | 'cleanup'>

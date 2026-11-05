@@ -1,24 +1,39 @@
-import { useServerEnv } from '#vitehub/env/server'
-import { ask, defineAgent } from 'vite-hub/agent'
-import { emailSchema, jevLabels, matchRule } from '../lib/labeller'
+import { defineAgent } from 'vite-hub/agent'
+import { ask, vercel } from 'vite-hub/gateways'
+import { gmail } from 'vite-hub/agent/channels'
+import { labeller } from 'vite-hub/presets/labeller'
+import config from '../../labeller.config'
+import { gmailClient } from '../lib/gmail'
+import { settings } from '../lib/settings'
 
-/**
- * Labels one Gmail message. Rules from `labeller.config.ts` decide first; Jev chooses a label only when no rule matches.
- * The Agent never changes Gmail: the caller applies its output. The local Console records one session per email.
- */
+export const gmailChannel = gmail({
+  client: gmailClient,
+  labels: config.labels,
+  bodyLimit: 4000,
+  maxAttempts: 3,
+  dryRun: settings.LABELLER_DRY_RUN,
+})
+
 export default defineAgent({
-  description: 'Labels Gmail messages: config rules first, then Jev.',
+  extends: labeller,
   runtime: false,
-  data: emailSchema,
-  intercept: ({ input }) => input.data === undefined ? undefined : matchRule(input.data, useServerEnv().labeller.rules),
+  messages: { transcripts: false },
+  options: {
+    ...config,
+    client: gmailClient,
+    bodyLimit: 4000,
+    dryRun: settings.LABELLER_DRY_RUN,
+    trashEnabled: settings.LABELLER_TRASH_ENABLED,
+    minConfidence: settings.LABELLER_MIN_CONFIDENCE,
+  },
+  channels: { gmail: gmailChannel },
   driver: {
-    ask: () => {
-      // The annotation keeps `choice` typed as `string`: TypeScript drops the index signature of a spread mixed with a key.
-      const labels: Record<string, string> = {
-        ...jevLabels(useServerEnv().labeller.labels),
+    gateway: vercel({ model: 'typesafe-ai/jev' }),
+    ask: {
+      label: ask.choice('Which Gmail label fits this email? Choose "none" if no label clearly fits.', {
+        ...Object.fromEntries(Object.entries(config.labels).flatMap(([name, label]) => 'description' in label ? [[name, label.description]] : [])),
         none: 'No label clearly fits this email.',
-      }
-      return { label: ask.choice('Which Gmail label fits this email? Choose "none" if no label clearly fits.', labels) }
+      }),
     },
   },
 })
