@@ -106,7 +106,7 @@ If Executor sits behind Cloudflare Access, also set `CF_ACCESS_CLIENT_ID` and `C
 
 The build copies the other settings from `.env` into the Worker config, so rebuild and redeploy after changing them. Secrets stay on the Worker across deploys.
 
-To deploy from GitHub Actions on every push to `main`, add the non-secret settings as repository variables, a `CLOUDFLARE_API_TOKEN` secret, and the variable `DEPLOY_ENABLED=true`. Unset `LABELLER_*` variables fall back to their safe defaults, so set `LABELLER_DRY_RUN=false` there too.
+Production deploys every push to `main` through Cloudflare Workers Builds, which reads its settings from the Worker's build variables, not `.env`. To deploy from GitHub Actions instead, add the non-secret settings as repository variables, a `CLOUDFLARE_API_TOKEN` secret, and the variable `DEPLOY_ENABLED=true`. Unset `LABELLER_*` variables fall back to their safe defaults, so set `LABELLER_DRY_RUN=false` there too.
 
 **Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. To react right away:
 
