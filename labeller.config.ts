@@ -85,7 +85,7 @@ export default {
     promotions: { hasLabel: 'CATEGORY_PROMOTIONS', label: 'Promotions' },
   },
 
-  // Moves old messages to Trash once a day. Starred messages are kept. Inactive until LABELLER_CLEANUP_ENABLED=true.
+  // Moves old messages to Trash once a day. Starred messages are kept. Inactive until LABELLER_CLEANUP_ENABLED=true and LABELLER_DRY_RUN=false.
   cleanup: {
     promotions: { label: 'Promotions', olderThan: 14 },
     security: { label: 'Security', olderThan: 30 },
