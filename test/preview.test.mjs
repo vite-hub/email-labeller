@@ -9,6 +9,7 @@ import { after, before, test } from 'node:test'
 
 const token = 'fixture-admin-token-with-32-characters'
 const calls = []
+const writes = []
 const labels = [{ id: 'INBOX', name: 'INBOX', type: 'system' }, { id: 'CATEGORY_PROMOTIONS', name: 'CATEGORY_PROMOTIONS', type: 'system' }]
 const fixtures = [
   ['bot', 'notifications@github.com', 'Re: issue', { 'X-GitHub-Sender': 'renovate[bot]' }],
@@ -38,11 +39,23 @@ const tools = { gmail: { gmail: { users: {
   getProfile: tool('profile.get', () => ({ emailAddress: 'fixture@example.com', historyId: '1' })),
   history: { list: tool('history.list', () => ({ historyId: '2', history: [] })) },
   labels: { list: tool('labels.list', () => ({ labels })), get: tool('labels.get', ({ path }) => labels.find(label => label.id === path.id)),
-    create: forbidden('labels.create'), patch: forbidden('labels.patch') },
+    create: tool('labels.create', ({ body }) => {
+      const label = { id: `Label_${labels.length}`, name: body.name, type: 'user' }
+      labels.push(label)
+      return label
+    }),
+    patch: forbidden('labels.patch') },
   messages: {
     list: tool('messages.list', () => ({ messages: messages.map(({ id }) => ({ id })) })),
     get: tool('messages.get', ({ path }) => messages.find(message => message.id === path.id)),
-    modify: forbidden('messages.modify'), trash: forbidden('messages.trash'),
+    modify: tool('messages.modify', ({ path, body }) => {
+      writes.push(['modify', path.id, body.addLabelIds?.map(id => labels.find(label => label.id === id)?.name)])
+      return messages.find(message => message.id === path.id)
+    }),
+    trash: tool('messages.trash', ({ path }) => {
+      writes.push(['trash', path.id])
+      return messages.find(message => message.id === path.id)
+    }),
   },
 } } } }
 let worker, server, directory, base, logs = ''
@@ -146,4 +159,12 @@ test('health reads Channel state and keeps errors and message IDs private', asyn
   const admin = await fetch(`${base}/api/health`, { headers: { authorization: `Bearer ${token}` } })
   assert.equal(admin.status, 200, logs)
   assert.deepEqual((await admin.json()).skipped, [])
+})
+
+test('backfill applies the rule label and its trash action', async () => {
+  const backfill = await api('backfill', { ids: ['bot'] })
+  assert.equal(backfill.failed, 0)
+  assert.deepEqual(backfill.decisions.map(({ messageId, result }) => [messageId, result.label]), [['bot', 'GitHub/Bots']])
+  assert.ok(writes.some(([kind, id, added]) => kind === 'modify' && id === 'bot' && added?.includes('GitHub/Bots')), JSON.stringify(writes))
+  assert.ok(writes.some(([kind, id]) => kind === 'trash' && id === 'bot'), JSON.stringify(writes))
 })

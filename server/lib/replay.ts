@@ -10,6 +10,9 @@ const decisionSchema = v.object({
   rule: v.optional(v.string()),
 })
 
+// A child layer's hook replaces its parent's, so replay calls the preset's hook, which applies the label and its actions.
+const applyDecision = labeller.hooks?.['agent:finish']
+
 export async function replay(options: { query: string, max: number, pageToken?: string, ids?: string[], preview?: boolean, relabel?: boolean }) {
   const decisions: { messageId: string, result: v.InferOutput<typeof decisionSchema> }[] = []
   const agent = defineAgent({
@@ -17,15 +20,18 @@ export async function replay(options: { query: string, max: number, pageToken?: 
     // Admin previews and backfills do not persist private mail or classification results.
     invocations: false,
     hooks: {
-      async 'agent:finish'({ message, result }) {
+      async 'agent:finish'(event) {
+        const { message, result } = event
         if (!message) return
         const decision = v.parse(decisionSchema, result)
         decisions.push({ messageId: message.data.id, result: decision })
-        if (!options.relabel) return
-        const label = typeof decision.label === 'string' ? decision.label : decision.label.choice
-        const confidence = typeof decision.label === 'string' ? 1 : decision.label.confidence
-        const selected = confidence >= settings.LABELLER_MIN_CONFIDENCE && Object.hasOwn(config.labels, label) ? label : undefined
-        await message.modify({ removeLabels: Object.keys(config.labels).filter(name => name !== selected) })
+        if (options.relabel) {
+          const label = typeof decision.label === 'string' ? decision.label : decision.label.choice
+          const confidence = typeof decision.label === 'string' ? 1 : decision.label.confidence
+          const selected = confidence >= settings.LABELLER_MIN_CONFIDENCE && Object.hasOwn(config.labels, label) ? label : undefined
+          await message.modify({ removeLabels: Object.keys(config.labels).filter(name => name !== selected) })
+        }
+        await applyDecision?.(event)
       },
     },
   })
