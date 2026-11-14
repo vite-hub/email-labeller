@@ -1,6 +1,7 @@
-const token = process.env.VITEHUB_SECRET || process.env.LABELLER_ADMIN_TOKEN
+const token = process.env.VITEHUB_SECRET
 if (!token) throw new Error('VITEHUB_SECRET is required')
-const base = process.env.LABELLER_URL || 'https://email-labeller.onmax.me'
+const base = process.env.LABELLER_URL
+if (!base) throw new Error('Set LABELLER_URL to your Worker or local server, such as http://localhost:5173')
 const response = await fetch(new URL('/api/labels', base), {
   method: 'POST',
   headers: { 'authorization': `Bearer ${token}`, 'content-type': 'application/json' },

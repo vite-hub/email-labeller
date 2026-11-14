@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+.git
+.data
+.output
+.output-*
+.vitehub
+.wrangler
+node_modules

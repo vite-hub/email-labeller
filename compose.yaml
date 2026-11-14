@@ -1,0 +1,13 @@
+services:
+  labeller:
+    image: ghcr.io/vite-hub/email-labeller:latest
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - labeller-data:/app/.data
+    restart: unless-stopped
+
+volumes:
+  labeller-data:

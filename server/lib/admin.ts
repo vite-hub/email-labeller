@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createError, getHeader, type H3Event } from 'h3'
 import { useServerEnv } from '#vitehub/env/server'
 
-/** Requires `Authorization: Bearer <VITEHUB_SECRET>` or the legacy admin token. */
+/** Requires `Authorization: Bearer <VITEHUB_SECRET>`. */
 export function requireAdmin(event: H3Event): void {
   if (!useServerEnv().labeller.adminToken) throw createError({ statusCode: 503, message: 'No admin secret is configured' })
   if (!isAdmin(event)) throw createError({ statusCode: 401, message: 'Unauthorized' })

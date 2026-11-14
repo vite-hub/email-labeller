@@ -8,9 +8,9 @@
 [![version](https://comark-ui.onmax.me/badge.svg?label=version&value=0.1.0)](./package.json)
 [![license: MIT](https://comark-ui.onmax.me/badge.svg?label=license&value=MIT)](./LICENSE)
 
-Email labeller labels new Gmail Inbox messages from a Cloudflare Worker. Your rules run first. When no rule matches, [Jev](https://typesafe.ai), TypeSafe's classification model, picks one of your labels from their descriptions and says how sure it is. Rules can also archive, mark as read, star, or trash, and a daily cleanup trashes old labelled mail. It starts in dry-run mode and changes nothing in Gmail until you turn that off.
+Email labeller labels new Gmail Inbox messages, from a Cloudflare Worker or one Docker container. Your rules run first. When no rule matches, [Jev](https://typesafe.ai), TypeSafe's classification model, picks one of your labels from their descriptions and says how sure it is. Rules can also archive, mark as read, star, or trash, and a daily cleanup trashes old labelled mail. It starts in dry-run mode and changes nothing in Gmail until you turn that off.
 
-[How it works](#how-it-works) · [Setup](#setup) · [Labels and rules](#labels-and-rules) · [Deploy](#deploy) · [Admin API](#admin-api) · [Limits](#limits)
+[How it works](#how-it-works) · [Setup](#setup) · [Labels and rules](#labels-and-rules) · [Deploy](#deploy) · [Console](#console) · [Admin API](#admin-api) · [Cost](#cost) · [Limits](#limits)
 
 An independent project by [@onmax](https://github.com/onmax), built on [ViteHub](https://vitehub.dev).
 
@@ -24,11 +24,18 @@ Cron every 5 minutes ───────────────────�
 Cron daily at 04:00 UTC -> trash labelled mail older than its cleanup age
 ```
 
-Gmail access goes through [Executor](https://github.com/UsefulSoftwareCo/executor), which holds and refreshes the Google OAuth credential. Jev runs through Vercel AI Gateway as [`typesafe-ai/jev`](https://vercel.com/ai-gateway/models/jev). It sees a message only when no rule matches, and gets its headers, its current labels, and at most 4,000 characters of its plain-text body. ViteHub owns Gmail parsing, history, retries, and message actions. Its Gmail Channel stores sync and delivery state in a Cloudflare Durable Object. Admin previews and backfills do not write an Invocation journal.
+Gmail access goes through [Executor](https://github.com/UsefulSoftwareCo/executor), which holds and refreshes the Google OAuth credential. Jev runs through Vercel AI Gateway as [`typesafe-ai/jev`](https://vercel.com/ai-gateway/models/jev). It sees a message only when no rule matches, and gets its headers, its current labels, and the first 1,000 characters of its plain-text body (`LABELLER_BODY_LIMIT`). ViteHub owns Gmail parsing, history, retries, and message actions. Its Gmail Channel keeps the history cursor and mailbox lock in a Cloudflare Durable Object, or in a SQLite file in Docker. Admin previews and backfills do not write an Invocation journal.
 
 ## Setup
 
-You need Node.js 24.15+, pnpm, an Executor v2 instance with an org-owned Gmail account and a personal access token, a Vercel AI Gateway key with access to `typesafe-ai/jev`, and a Cloudflare account.
+You need:
+
+- **Executor v2** with a Gmail account connected to your organization, and a personal access token for this app. Executor holds and refreshes the Google OAuth credential, so this app never sees it.
+- **A Vercel AI Gateway key** for `typesafe-ai/jev`.
+- **Somewhere to run it:** a Cloudflare account, or any machine with Docker.
+- Node.js 24.15+ and pnpm, to develop locally.
+
+Select **Use this template** on GitHub, or clone the repository, then:
 
 ```sh
 corepack enable
@@ -89,9 +96,9 @@ Three settings guard Gmail, and all start in the safe position:
 
 ## Deploy
 
-This app deploys to Cloudflare Workers and needs the generated `CHAT_STATE` Durable Object migration. `wrangler versions upload` cannot apply a new migration; a future deployment must apply it before versions can be uploaded. Cloudflare Workers is the only host this app has run on. ViteHub also targets Vercel, Netlify, and Node through the `preset` option in `vite.config.ts`, but they don't work for this app yet. With the pinned ViteHub preview, the Vercel build fails to bundle the cron jobs, and a plain Node server needs ViteHub's process runtime to run them.
+### Cloudflare Workers
 
-Create a KV namespace and put its ID in `.env` as `CLOUDFLARE_KV_NAMESPACE_ID`, next to `CLOUDFLARE_ACCOUNT_ID` and, optionally, `CLOUDFLARE_WORKER_DOMAIN`. Then build, set the secrets, and deploy:
+The Worker uses KV, two Cron Triggers, and a SQLite Durable Object for the Gmail Channel's state. Create a KV namespace and put its ID in `.env` as `CLOUDFLARE_KV_NAMESPACE_ID`, next to `CLOUDFLARE_ACCOUNT_ID` and, optionally, `CLOUDFLARE_WORKER_DOMAIN`. Then build, set the secrets, and deploy:
 
 ```sh
 pnpm exec wrangler kv namespace create email-labeller
@@ -102,19 +109,37 @@ pnpm exec wrangler secret put VITEHUB_SECRET --config .output/server/wrangler.js
 pnpm run deploy
 ```
 
-If Executor sits behind Cloudflare Access, also set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` as secrets. The first Channel poll saves Gmail's current position and labels only mail that arrives after it. The old KV cursor is not reused; use [backfill](#admin-api) for mail received before the first poll.
+If Executor sits behind Cloudflare Access, also set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` as secrets. The first Channel poll saves Gmail's current position and labels only mail that arrives after it. Use [backfill](#admin-api) for older mail.
 
-The build copies the other settings from `.env` into the Worker config, so rebuild and redeploy after changing them. Secrets stay on the Worker across deploys.
+The build copies the other settings from `.env` into the Worker config, so rebuild and redeploy after changing them. Secrets stay on the Worker across deploys. `pnpm run deploy` refuses a build without `EXECUTOR_URL` or `EXECUTOR_GMAIL_ACCOUNT`.
 
-Production deploys every push to `main` through Cloudflare Workers Builds, which reads its settings from the Worker's build variables, not `.env`. To deploy from GitHub Actions instead, add the non-secret settings as repository variables, a `CLOUDFLARE_API_TOKEN` secret, and the variable `DEPLOY_ENABLED=true`. Unset `LABELLER_*` variables fall back to their safe defaults, so set `LABELLER_DRY_RUN=false` there too.
+To deploy every push to `main`, connect the repository in **Workers Builds** with the build command `pnpm build` and the deploy command `pnpm run deploy`, and add the non-secret settings from `.env` as build variables. Or deploy from GitHub Actions: add them as repository variables, a `CLOUDFLARE_API_TOKEN` secret, and the variable `DEPLOY_ENABLED=true`. Unset `LABELLER_*` variables fall back to their safe defaults, so set `LABELLER_DRY_RUN=false` there too.
+
+### Docker
+
+The image runs the labeller as one Node process. The Gmail cursor and lock, KV, and the Invocation journal live in `/app/.data`, and the Schedules run on a timer inside the process. Fill in `.env` (the Cloudflare settings at its end don't apply), then:
+
+```sh
+docker compose up -d
+```
+
+Compose pulls `ghcr.io/vite-hub/email-labeller`, binds port 3000 to localhost, and keeps `/app/.data` in the `labeller-data` volume. That image is built from this repository's `labeller.config.ts`. To run your own labels and rules, build it from your copy with `docker compose up -d --build`. Put a reverse proxy such as Caddy in front of it for HTTPS. You need HTTPS for instant delivery and the Console.
+
+Run one container per mailbox. The state in `/app/.data` belongs to one process.
 
 **Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. To react right away:
 
 1. In the Google Cloud project of Executor's Gmail OAuth client, create a Pub/Sub topic and let `gmail-api-push@system.gserviceaccount.com` publish to it.
 2. Add an [authenticated push subscription](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions) that sends to `https://<your-domain>/api/_vitehub/agents/labeller/webhooks/gmail`.
-3. Set `GMAIL_PUBSUB_TOPIC` and `GMAIL_PUBSUB_SUBSCRIPTION` to their full names (`projects/<project>/topics/<topic>` and `projects/<project>/subscriptions/<subscription>`), `PUBSUB_AUDIENCE` to the subscription's audience, and `PUBSUB_SERVICE_ACCOUNT` to the email of its service account. Rebuild and deploy.
+3. Set `GMAIL_PUBSUB_TOPIC` and `GMAIL_PUBSUB_SUBSCRIPTION` to their full names (`projects/<project>/topics/<topic>` and `projects/<project>/subscriptions/<subscription>`), `PUBSUB_AUDIENCE` to the subscription's audience, and `PUBSUB_SERVICE_ACCOUNT` to the email of its service account. Rebuild and deploy. In Docker, restart the container.
 
-The Worker starts the Gmail watch on its next five-minute run and renews it before it expires. ViteHub rejects pushes without a valid Google-signed token and shares a mailbox lock and cursor between push and polling. Existing subscriptions must change from `/gmail/push` to the Channel webhook URL before this upgrade goes live.
+The labeller starts the Gmail watch on its next five-minute run and renews it before it expires. ViteHub rejects pushes without a valid Google-signed token and shares a mailbox lock and cursor between push and polling. If Cloudflare Access protects your domain, let the webhook path through it: Pub/Sub can't sign in, and the Channel checks Google's token itself.
+
+## Console
+
+Open the deployed app in the [ViteHub Console](https://console.vitehub.dev) to see the Gmail Channel's sync status and skipped messages, browse KV, and run the cleanup Schedule by hand. Sign in, select **+** next to **Apps**, and enter your app's URL. The Console shows a line such as `VITEHUB_CONSOLE_KEY_CONSOLE_3F9A12BC=<public key>`. Set it on the server: `wrangler secret put` on Cloudflare, or in `.env` for Docker. Then select **Check connection**. The Console signs every call with its private key, and the app keeps only the public key.
+
+Locally, `pnpm vitehub project info` and the other [`vitehub` commands](https://vitehub.dev/docs/development/cli) reach `pnpm dev` without a key.
 
 ## Admin API
 
@@ -137,7 +162,12 @@ curl -X POST https://<your-domain>/api/backfill \
 
 Preview and backfill responses contain ViteHub replay counts, item IDs and statuses, `nextCursor`, and `decisions` with each message ID and the raw rule or Jev result, including confidence. They no longer return the old `add`/`remove` decision shape. Cleanup returns the upstream `applied` and `rules` result.
 
-The ViteHub Console is at `/_vitehub`. In production it accepts only Cloudflare Access logins. Set `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` to your Access application; the defaults belong to the author's account.
+
+## Cost
+
+- **Jev:** $0.042 per million input tokens through AI Gateway, and output is free. Jev sees a message only when no rule matches, and gets its headers, its labels, the label descriptions, and the first 1,000 characters of body, about 700 tokens. Rules cost nothing. On the author's mailbox about 650 messages a month reach Jev (2,000 arrive outside Trash, plus 30,000 GitHub bot notifications that a rule trashes), which comes to well under $0.05 a month.
+- **Cloudflare:** over 30 days on the author's mailbox, the Worker averaged under 11,000 requests a day, against the free plan's 100,000. Its median request used 0.9 ms of CPU, but the 99th percentile used 133 ms. The free plan allows 10 ms per request, so plan on Workers Paid ($5 a month) if you label a lot of mail.
+- **Docker:** whatever the machine costs. The container idles at about 50 MB of memory.
 
 ## Limits
 
@@ -145,7 +175,7 @@ The ViteHub Console is at `/_vitehub`. In production it accepts only Cloudflare 
 - Polling and push use the Gmail Channel mailbox lock. The Channel owns retry and skipped-message state.
 - A message that fails three syncs is skipped and listed in `/api/health`. Backfill its ID to retry.
 - Changing rules or label descriptions affects new mail only. Backfill with `relabel: true` to redo old mail.
-- The project pins a Nitro beta and the newest published ViteHub main preview available at upgrade time, `6de1f87117da68ef273426248c7b8fed61e6fc06`. Every `@vite-hub/*` dependency is overridden to the same pkg.pr.new build in `pnpm-workspace.yaml`.
+- The project pins a Nitro release candidate and the newest published ViteHub main preview available at upgrade time, `d0f66e67e942bc1101f0c9ec886bc658de62c99a`. Every `@vite-hub/*` dependency is overridden to the same pkg.pr.new build in `pnpm-workspace.yaml`.
 
 ## License
 
