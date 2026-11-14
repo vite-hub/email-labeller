@@ -1,6 +1,6 @@
 # Email labeller
 
-Labels Maxi's Gmail (maximogarciamtnez@gmail.com) on a Cloudflare Worker at https://email-labeller.onmax.me. Rules run first and Jev (`typesafe-ai/jev` through Vercel AI Gateway) labels the rest. Production runs live, with trash and cleanup enabled.
+Labels Maxi's Gmail on a Cloudflare Worker at https://email-labeller.onmax.me. The same app also builds as a Docker image (`LABELLER_HOST=node`). Rules run first and Jev (`typesafe-ai/jev` through Vercel AI Gateway) labels the rest. Production runs live, with trash and cleanup enabled.
 
 ## Rules
 
@@ -12,8 +12,8 @@ Labels Maxi's Gmail (maximogarciamtnez@gmail.com) on a Cloudflare Worker at http
 
 - `.env` (gitignored) has the production settings and `VITEHUB_SECRET`, the bearer token for `/api/*`.
 - Executor (`tools.gmail.gmail.users.*`) gives direct Gmail access, but only for reads.
-- Cloudflare (Executor `tools.cloudflare`) manages Worker secrets. Secret values can't be read back. To rotate the token, set the same new value for `VITEHUB_SECRET` and `LABELLER_ADMIN_TOKEN`, then update `.env`.
-- Cloudflare Workers Builds deploys every push to `main` with `pnpm build && pnpm typecheck`, then `pnpm run deploy`. It doesn't read `.env`: its settings are the build variables under Settings → Builds on the `email-labeller` Worker. When you add or rename a setting in `nitro.config.ts`, change it there too, or the next push deploys a Worker without it. The GitHub Actions deploy is skipped (`DEPLOY_ENABLED` is off).
+- Cloudflare (Executor `tools.cloudflare`) manages Worker secrets. Secret values can't be read back. To rotate the token, set a new `VITEHUB_SECRET` on the Worker, then update `.env`.
+- Cloudflare Workers Builds deploys every push to `main` with `pnpm build && pnpm typecheck`, then `pnpm run deploy`. It doesn't read `.env`: its settings are the build variables under Settings → Builds on the `email-labeller` Worker. When you add or rename a setting in `nitro.config.ts`, change it there too. `scripts/deploy.mjs` refuses a build without `EXECUTOR_URL` or `EXECUTOR_GMAIL_ACCOUNT`. The GitHub Actions deploy is skipped (`DEPLOY_ENABLED` is off).
 - To deploy by hand, run `pnpm build && pnpm run deploy` after loading `.env`. `wrangler versions upload --config .output/server/wrangler.json` checks Worker startup without going live.
 - After upgrading ViteHub, check Worker startup with `wrangler versions upload`. ViteHub keeps the Console journal in memory on Workers, and if that fallback regresses, startup fails because libsql rejects `file:` URLs.
 
@@ -32,3 +32,8 @@ api cleanup                                                    # trash old label
 ```
 
 See `README.md` for setup, rules syntax, and deployment.
+
+## Console and push
+
+- console.vitehub.dev signs its calls to `POST /_vitehub/rpc`. The Worker needs the `VITEHUB_CONSOLE_KEY_*` secret that the Console shows when you link the app. Cloudflare Access must not cover `/_vitehub`, or the Console's calls get a login redirect.
+- Gmail push reaches `/api/_vitehub/agents/labeller/webhooks/gmail`. A separate Access app with a bypass policy lets Pub/Sub through; the Channel verifies Google's OIDC token. If pushes fail, `wrangler tail email-labeller` shows their status.
