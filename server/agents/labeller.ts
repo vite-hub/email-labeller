@@ -1,20 +1,11 @@
 import { defineAgent } from 'vite-hub/agent'
-import { ask, vercel } from 'vite-hub/gateways'
-import { gmail } from 'vite-hub/agent/channels'
+import { vercel } from 'vite-hub/gateways'
 import { labeller } from 'vite-hub/presets/labeller'
 import config from '../../labeller.config'
 import { gmailClient } from '../lib/gmail'
 import { settings } from '../lib/settings'
 
-export const gmailChannel = gmail({
-  client: gmailClient,
-  labels: config.labels,
-  bodyLimit: settings.LABELLER_BODY_LIMIT,
-  maxAttempts: 3,
-  dryRun: settings.LABELLER_DRY_RUN,
-})
-
-export default defineAgent({
+const agent = defineAgent({
   extends: labeller,
   runtime: false,
   messages: { transcripts: false },
@@ -25,15 +16,15 @@ export default defineAgent({
     dryRun: settings.LABELLER_DRY_RUN,
     trashEnabled: settings.LABELLER_TRASH_ENABLED,
     minConfidence: settings.LABELLER_MIN_CONFIDENCE,
+    maxAttempts: 3,
   },
-  channels: { gmail: gmailChannel },
-  driver: {
-    gateway: vercel({ model: 'typesafe-ai/jev' }),
-    ask: {
-      label: ask.choice('Which Gmail label fits this email? Choose "none" if no label clearly fits.', {
-        ...Object.fromEntries(Object.entries(config.labels).flatMap(([name, label]) => 'description' in label ? [[name, label.description]] : [])),
-        none: 'No label clearly fits this email.',
-      }),
-    },
-  },
+  driver: { gateway: vercel({ model: 'typesafe-ai/jev' }) },
 })
+
+export default agent
+
+// The preset defines the Channel; its type leaves `channels` optional.
+const channel = agent.channels?.gmail
+if (!channel) throw new TypeError('The labeller preset defines no Gmail Channel.')
+/** The poll Schedule, `/api/sync`, and `/api/health` read this Channel. */
+export const gmailChannel = channel
