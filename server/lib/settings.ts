@@ -8,4 +8,5 @@ export const settings = v.parse(v.object({
   LABELLER_TRASH_ENABLED: boolean('false'),
   LABELLER_CLEANUP_ENABLED: boolean('false'),
   LABELLER_MIN_CONFIDENCE: v.pipe(v.optional(v.string(), '0.6'), v.transform(Number), v.number(), v.minValue(0), v.maxValue(1)),
+  LABELLER_BODY_LIMIT: v.pipe(v.optional(v.string(), '1000'), v.transform(Number), v.integer(), v.minValue(1), v.maxValue(10000)),
 }), process.env)

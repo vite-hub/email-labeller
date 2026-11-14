@@ -24,7 +24,7 @@ Cron every 5 minutes ───────────────────�
 Cron daily at 04:00 UTC -> trash labelled mail older than its cleanup age
 ```
 
-Gmail access goes through [Executor](https://github.com/UsefulSoftwareCo/executor), which holds and refreshes the Google OAuth credential. Jev runs through Vercel AI Gateway as [`typesafe-ai/jev`](https://vercel.com/ai-gateway/models/jev). It sees a message only when no rule matches, and gets its headers, its current labels, and at most 4,000 characters of its plain-text body. ViteHub owns Gmail parsing, history, retries, and message actions. Its Gmail Channel keeps the history cursor and mailbox lock in a Cloudflare Durable Object, or in a SQLite file in Docker. Admin previews and backfills do not write an Invocation journal.
+Gmail access goes through [Executor](https://github.com/UsefulSoftwareCo/executor), which holds and refreshes the Google OAuth credential. Jev runs through Vercel AI Gateway as [`typesafe-ai/jev`](https://vercel.com/ai-gateway/models/jev). It sees a message only when no rule matches, and gets its headers, its current labels, and the first 1,000 characters of its plain-text body (`LABELLER_BODY_LIMIT`). ViteHub owns Gmail parsing, history, retries, and message actions. Its Gmail Channel keeps the history cursor and mailbox lock in a Cloudflare Durable Object, or in a SQLite file in Docker. Admin previews and backfills do not write an Invocation journal.
 
 ## Setup
 
@@ -165,7 +165,7 @@ Preview and backfill responses contain ViteHub replay counts, item IDs and statu
 
 ## Cost
 
-- **Jev:** $0.042 per million input tokens through AI Gateway, and output is free. Jev sees a message only when no rule matches, and gets its headers, its labels, the label descriptions, and at most 4,000 characters of body. Rules cost nothing.
+- **Jev:** $0.042 per million input tokens through AI Gateway, and output is free. Jev sees a message only when no rule matches, and gets its headers, its labels, the label descriptions, and the first 1,000 characters of body, about 700 tokens. Rules cost nothing. On the author's mailbox about 650 messages a month reach Jev (2,000 arrive outside Trash, plus 30,000 GitHub bot notifications that a rule trashes), which comes to well under $0.05 a month.
 - **Cloudflare:** over 30 days on the author's mailbox, the Worker averaged under 11,000 requests a day, against the free plan's 100,000. Its median request used 0.9 ms of CPU, but the 99th percentile used 133 ms. The free plan allows 10 ms per request, so plan on Workers Paid ($5 a month) if you label a lot of mail.
 - **Docker:** whatever the machine costs. The container idles at about 50 MB of memory.
 

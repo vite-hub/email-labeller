@@ -9,7 +9,7 @@ import { settings } from '../lib/settings'
 export const gmailChannel = gmail({
   client: gmailClient,
   labels: config.labels,
-  bodyLimit: 4000,
+  bodyLimit: settings.LABELLER_BODY_LIMIT,
   maxAttempts: 3,
   dryRun: settings.LABELLER_DRY_RUN,
 })
@@ -21,7 +21,7 @@ export default defineAgent({
   options: {
     ...config,
     client: gmailClient,
-    bodyLimit: 4000,
+    bodyLimit: settings.LABELLER_BODY_LIMIT,
     dryRun: settings.LABELLER_DRY_RUN,
     trashEnabled: settings.LABELLER_TRASH_ENABLED,
     minConfidence: settings.LABELLER_MIN_CONFIDENCE,
