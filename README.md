@@ -117,7 +117,7 @@ To deploy every push to `main`, connect the repository in **Workers Builds** wit
 
 ### Docker
 
-The image runs the labeller as one Node process. The Gmail cursor and lock, KV, and the Invocation journal live in `/app/.data`, and the Schedules run on a timer inside the process. Fill in `.env` (the `CLOUDFLARE_*` settings don't apply), then:
+The image runs the labeller as one Node process. The Gmail cursor and lock, KV, and the Invocation journal live in `/app/.data`, and the Schedules run on a timer inside the process. Fill in `.env` (the Cloudflare settings at its end don't apply), then:
 
 ```sh
 docker compose up -d
@@ -175,7 +175,7 @@ Preview and backfill responses contain ViteHub replay counts, item IDs and statu
 - Polling and push use the Gmail Channel mailbox lock. The Channel owns retry and skipped-message state.
 - A message that fails three syncs is skipped and listed in `/api/health`. Backfill its ID to retry.
 - Changing rules or label descriptions affects new mail only. Backfill with `relabel: true` to redo old mail.
-- The project pins a Nitro release candidate and the newest published ViteHub main preview available at upgrade time, `a6a5653dbddd26a8d8a6fab21e1b59bed105d483`. Every `@vite-hub/*` dependency is overridden to the same pkg.pr.new build in `pnpm-workspace.yaml`.
+- The project pins a Nitro release candidate and the newest published ViteHub main preview available at upgrade time, `d0f66e67e942bc1101f0c9ec886bc658de62c99a`. Every `@vite-hub/*` dependency is overridden to the same pkg.pr.new build in `pnpm-workspace.yaml`.
 
 ## License
 

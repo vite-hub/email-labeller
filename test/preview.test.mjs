@@ -165,6 +165,6 @@ test('backfill applies the rule label and its trash action', async () => {
   const backfill = await api('backfill', { ids: ['bot'] })
   assert.equal(backfill.failed, 0)
   assert.deepEqual(backfill.decisions.map(({ messageId, result }) => [messageId, result.label]), [['bot', 'GitHub/Bots']])
-  assert.ok(writes.some(([kind, id, added]) => kind === 'modify' && id === 'bot' && added?.includes('GitHub/Bots')), JSON.stringify(writes))
-  assert.ok(writes.some(([kind, id]) => kind === 'trash' && id === 'bot'), JSON.stringify(writes))
+  // The preset's hook runs once per message: one label write and one move to Trash.
+  assert.deepEqual(writes.filter(([, id]) => id === 'bot'), [['modify', 'bot', ['GitHub/Bots']], ['trash', 'bot']])
 })

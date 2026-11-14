@@ -1,5 +1,5 @@
 import { nitro } from 'nitro/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import { vitehub } from 'vite-hub'
 import { env } from 'vite-hub/env'
 
@@ -54,9 +54,9 @@ export default defineConfig({
             agent: { providers: { state: { driver: 'libsql', url: process.env.VITEHUB_AGENT_STATE_URL || 'file:.data/agent-state.db' } } },
           }
         : {
-            // nitro.config.ts declares the KV namespace for Wrangler.
-            kv: { driver: 'cloudflare-kv-binding' },
-            agent: { providers: { state: { driver: 'cloudflare' } } },
+            // ViteHub writes the `KV` binding and the Agent state Durable Object.
+            kv: { driver: 'cloudflare-kv-binding', namespaceId: loadEnv('production', process.cwd(), '').CLOUDFLARE_KV_NAMESPACE_ID },
+            agent: true,
           },
     }),
     nitro() as never,

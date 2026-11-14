@@ -20,12 +20,8 @@ export default defineConfig({
       },
       // Workers Logs keeps console output searchable in the dashboard and through the API.
       observability: { enabled: true },
+      // ViteHub doesn't write Worker vars from Server Env yet, so the non-secret settings are listed here.
       vars: Object.fromEntries(variables.flatMap(name => deployment[name] ? [[name, deployment[name]]] : [])),
-      kv_namespaces: [{
-        binding: 'KV',
-        // Local preview works before a namespace is created. `pnpm run deploy` rejects this placeholder.
-        id: deployment.CLOUDFLARE_KV_NAMESPACE_ID || '00000000000000000000000000000000',
-      }],
     },
   },
 })
