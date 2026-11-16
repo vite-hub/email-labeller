@@ -137,7 +137,7 @@ The labeller starts the Gmail watch on its next five-minute run and renews it be
 
 ## Console
 
-Open the deployed app in the [ViteHub Console](https://console.vitehub.dev) to see the Gmail Channel's sync status and skipped messages, browse KV, and run the cleanup Schedule by hand. Sign in, select **+** next to **Apps**, and enter your app's URL. The Console shows a line such as `VITEHUB_CONSOLE_KEY_CONSOLE_3F9A12BC=<public key>`. Set it on the server: `wrangler secret put` on Cloudflare, or in `.env` for Docker. Then select **Check connection**. The Console signs every call with its private key, and the app keeps only the public key.
+Open the deployed app in the [ViteHub Console](https://console.vitehub.dev) to see the Gmail Channel's sync status and skipped messages, and browse KV. Sign in, select **+** next to **Apps**, and enter your app's URL. The Console shows a line such as `VITEHUB_CONSOLE_KEY_CONSOLE_3F9A12BC=<public key>`. It is a public key, so on Cloudflare put it in `vars` in [`nitro.config.ts`](./nitro.config.ts), in place of this repository's key, and deploy. For Docker, put it in `.env`. Then select **Check connection**. The Console signs every call with its private key, and the app keeps only the public key. In production the Console can't run Schedules by hand, because `console: true` leaves `invoke` off. Use [`POST /api/cleanup`](#admin-api) instead.
 
 Locally, `pnpm vitehub project info` and the other [`vitehub` commands](https://vitehub.dev/docs/development/cli) reach `pnpm dev` without a key.
 
@@ -175,7 +175,7 @@ Preview and backfill responses contain ViteHub replay counts, item IDs and statu
 - Polling and push use the Gmail Channel mailbox lock. The Channel owns retry and skipped-message state.
 - A message that fails three syncs is skipped and listed in `/api/health`. Backfill its ID to retry.
 - Changing rules or label descriptions affects new mail only. Backfill with `relabel: true` to redo old mail.
-- The project pins a Nitro release candidate and the newest published ViteHub main preview available at upgrade time, `8724a59e6864f59c269361ad7325d52cf63f4106`. Every `@vite-hub/*` dependency is overridden to the same pkg.pr.new build in `pnpm-workspace.yaml`.
+- The project pins a Nitro release candidate and a ViteHub main preview, `677867646324af79c9ec718e5597a6922b862256`. `vite-hub` and every `@vite-hub/*` dependency in `package.json` use the same pkg.pr.new build. To move to another build, change the URLs and run `pnpm update vite-hub "@vite-hub/*"`.
 
 ## License
 
