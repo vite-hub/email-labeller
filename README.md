@@ -127,7 +127,7 @@ Compose pulls `ghcr.io/vite-hub/email-labeller`, binds port 3000 to localhost, a
 
 Run one container per mailbox. The state in `/app/.data` belongs to one process.
 
-**Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. To react right away:
+**Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. Push costs more on Cloudflare: each push runs a full mailbox sync of about 60 Durable Object requests. One busy mailbox reached about 200,000 requests a day this way, against 1M included per month. To react right away anyway:
 
 1. In the Google Cloud project of Executor's Gmail OAuth client, create a Pub/Sub topic and let `gmail-api-push@system.gserviceaccount.com` publish to it.
 2. Add an [authenticated push subscription](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions) that sends to `https://<your-domain>/api/_vitehub/agents/labeller/webhooks/gmail`.
