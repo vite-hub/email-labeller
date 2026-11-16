@@ -127,10 +127,10 @@ Compose pulls `ghcr.io/vite-hub/email-labeller`, binds port 3000 to localhost, a
 
 Run one container per mailbox. The state in `/app/.data` belongs to one process.
 
-**Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. Push costs more on Cloudflare: each push runs a full mailbox sync of about 60 Durable Object requests. One busy mailbox reached about 200,000 requests a day this way, against 1M included per month. To react right away anyway:
+**Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. With push, Gmail tells the Worker about each Inbox change and new mail is labelled within seconds. A push that finds nothing new costs at most a few Durable Object requests, and none when the Worker already read past it. To turn it on:
 
 1. In the Google Cloud project of Executor's Gmail OAuth client, create a Pub/Sub topic and let `gmail-api-push@system.gserviceaccount.com` publish to it.
-2. Add an [authenticated push subscription](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions) that sends to `https://<your-domain>/api/_vitehub/agents/labeller/webhooks/gmail`.
+2. Add an [authenticated push subscription](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions) that sends to `https://<your-domain>/api/_vitehub/agents/labeller/webhooks/gmail`, with `--ack-deadline=600 --min-retry-delay=10s --max-retry-delay=600s`. A push answers 503 when its sync fails or has work left, and Pub/Sub sends it again.
 3. Set `GMAIL_PUBSUB_TOPIC` and `GMAIL_PUBSUB_SUBSCRIPTION` to their full names (`projects/<project>/topics/<topic>` and `projects/<project>/subscriptions/<subscription>`), `PUBSUB_AUDIENCE` to the subscription's audience, and `PUBSUB_SERVICE_ACCOUNT` to the email of its service account. Rebuild and deploy. In Docker, restart the container.
 
 The labeller starts the Gmail watch on its next five-minute run and renews it before it expires. ViteHub rejects pushes without a valid Google-signed token and shares a mailbox lock and cursor between push and polling. If Cloudflare Access protects your domain, let the webhook path through it: Pub/Sub can't sign in, and the Channel checks Google's token itself.
