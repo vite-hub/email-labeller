@@ -35,10 +35,6 @@ export default defineConfig({
             pubsubServiceAccount: env({ optional: true, source: env.source('PUBSUB_SERVICE_ACCOUNT') }),
             pubsubSubscription: env({ optional: true, source: env.source('GMAIL_PUBSUB_SUBSCRIPTION') }),
           },
-          labeller: {
-            // Bearer token for /api/*.
-            adminToken: env({ optional: true, secret: true, source: env.source('VITEHUB_SECRET') }),
-          },
         },
       },
       comments: false,
