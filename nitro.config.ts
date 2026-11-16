@@ -18,8 +18,9 @@ export default defineConfig({
       ...deployment.CLOUDFLARE_WORKER_DOMAIN && {
         routes: [{ pattern: deployment.CLOUDFLARE_WORKER_DOMAIN, custom_domain: true }],
       },
-      // Workers Logs keeps console output searchable in the dashboard and through the API.
-      observability: { enabled: true },
+      // Workers Logs keeps console output searchable in the dashboard and through the API. Invocation logs are off:
+      // every Agent state call is its own Durable Object invocation, and those entries filled the Workers Logs quota.
+      observability: { enabled: true, logs: { invocation_logs: false } },
       // ViteHub doesn't write Worker vars from Server Env yet, so the non-secret settings are listed here.
       vars: Object.fromEntries(variables.flatMap(name => deployment[name] ? [[name, deployment[name]]] : [])),
     },
