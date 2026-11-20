@@ -1,4 +1,4 @@
-import { useServerEnv } from '#vitehub/env/server'
+import { useServerEnv } from 'vite-hub/env'
 import type { GmailClient } from 'vite-hub/agent/channels'
 import { execute } from './executor'
 

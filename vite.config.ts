@@ -59,7 +59,7 @@ export default defineConfig({
             // ViteHub serves the Worker on this custom domain instead of workers.dev.
             ...deployment.CLOUDFLARE_WORKER_DOMAIN && { publicUrl: `https://${deployment.CLOUDFLARE_WORKER_DOMAIN}` },
             // ViteHub writes the `KV` binding and the Agent state Durable Object.
-            kv: { driver: 'cloudflare-kv-binding', namespaceId: deployment.CLOUDFLARE_KV_NAMESPACE_ID },
+            kv: { driver: 'cloudflare', namespaceId: deployment.CLOUDFLARE_KV_NAMESPACE_ID },
             agent: true,
           },
     }),
