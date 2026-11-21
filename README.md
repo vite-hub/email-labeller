@@ -177,7 +177,7 @@ Preview and backfill responses contain ViteHub replay counts, item IDs and statu
 - Polling and push use the Gmail Channel mailbox lock. The Channel owns retry and skipped-message state.
 - A message that fails three syncs is skipped and listed in `/api/health`. Backfill its ID to retry.
 - Changing rules or label descriptions affects new mail only. Backfill with `relabel: true` to redo old mail.
-- The project pins a Nitro release candidate and a ViteHub main preview, `5178f7d`. `vite-hub` and every `@vite-hub/*` dependency in `package.json` use the same pkg.pr.new build. To move to another build, change the URLs and run `pnpm update vite-hub "@vite-hub/*"`.
+- The project pins a Nitro release candidate and a ViteHub main preview, `c53605e`. `vite-hub` and every `@vite-hub/*` dependency in `package.json` use the same pkg.pr.new build. To move to another build, change the URLs and run `pnpm update vite-hub "@vite-hub/*"`.
 
 ## License
 
