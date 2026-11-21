@@ -130,14 +130,16 @@ Run one container per mailbox. The state in `/app/.data` belongs to one process.
 **Instant delivery (optional).** Without it the Worker checks Gmail every five minutes. With push, Gmail tells the Worker about each Inbox change and new mail is labelled within seconds. A push that finds nothing new costs at most a few Durable Object requests, and none when the Worker already read past it. To turn it on:
 
 1. In the Google Cloud project of Executor's Gmail OAuth client, create a Pub/Sub topic and let `gmail-api-push@system.gserviceaccount.com` publish to it.
-2. Add an [authenticated push subscription](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions) that sends to `https://<your-domain>/api/_vitehub/agents/labeller/webhooks/gmail`, with `--ack-deadline=600 --min-retry-delay=10s --max-retry-delay=600s`. A push answers 503 when its sync fails or has work left, and Pub/Sub sends it again.
+2. Add an [authenticated push subscription](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions) that sends to `https://<your-domain>/_vitehub/agents/labeller/webhooks/gmail`, with `--ack-deadline=600 --min-retry-delay=10s --max-retry-delay=600s`. A push answers 503 when its sync fails or has work left, and Pub/Sub sends it again.
 3. Set `GMAIL_PUBSUB_TOPIC` and `GMAIL_PUBSUB_SUBSCRIPTION` to their full names (`projects/<project>/topics/<topic>` and `projects/<project>/subscriptions/<subscription>`), `PUBSUB_AUDIENCE` to the subscription's audience, and `PUBSUB_SERVICE_ACCOUNT` to the email of its service account. Rebuild and deploy. In Docker, restart the container.
 
 The labeller starts the Gmail watch on its next five-minute run and renews it before it expires. ViteHub rejects pushes without a valid Google-signed token and shares a mailbox lock and cursor between push and polling. If Cloudflare Access protects your domain, let the webhook path through it: Pub/Sub can't sign in, and the Channel checks Google's token itself.
 
+ViteHub builds before `5178f7d` served the webhook at `/api/_vitehub/agents/labeller/webhooks/gmail`. If your subscription still sends there, deploy first, then change the subscription's push endpoint and the Access bypass path to the new URL. Keep the same audience: `gcloud pubsub subscriptions modify-push-config` sets the audience to the endpoint unless you pass `--push-auth-token-audience`. Until you change it, the five-minute poll keeps labelling new mail.
+
 ## Console
 
-Open the deployed app in the [ViteHub Console](https://console.vitehub.dev) to see the Gmail Channel's sync status and skipped messages, browse KV, and run the cleanup Schedule by hand. Sign in, select **+** next to **Apps**, and enter your app's URL. The Console shows a line such as `VITEHUB_CONSOLE_KEY_CONSOLE_3F9A12BC=<public key>`. Set it on the server: `wrangler secret put` on Cloudflare, or in `.env` for Docker. Then select **Check connection**. The Console signs every call with its private key, and the app keeps only the public key.
+Open the deployed app in the [ViteHub Console](https://console.vitehub.dev) to see the Gmail Channel's sync status and skipped messages, and browse KV. Sign in, select **+** next to **Apps**, and enter your app's URL. The Console shows a line such as `VITEHUB_CONSOLE_KEY_CONSOLE_3F9A12BC=<public key>`. It is a public key, so on Cloudflare put it in `vars` in [`nitro.config.ts`](./nitro.config.ts), in place of this repository's key, and deploy. For Docker, put it in `.env`. Then select **Check connection**. The Console signs every call with its private key, and the app keeps only the public key. In production the Console can't run Schedules by hand, because `console: true` leaves `invoke` off. Use [`POST /api/cleanup`](#admin-api) instead.
 
 Locally, `pnpm vitehub project info` and the other [`vitehub` commands](https://vitehub.dev/docs/development/cli) reach `pnpm dev` without a key.
 
@@ -175,7 +177,7 @@ Preview and backfill responses contain ViteHub replay counts, item IDs and statu
 - Polling and push use the Gmail Channel mailbox lock. The Channel owns retry and skipped-message state.
 - A message that fails three syncs is skipped and listed in `/api/health`. Backfill its ID to retry.
 - Changing rules or label descriptions affects new mail only. Backfill with `relabel: true` to redo old mail.
-- The project pins a Nitro release candidate and the newest published ViteHub main preview available at upgrade time, `8724a59e6864f59c269361ad7325d52cf63f4106`. Every `@vite-hub/*` dependency is overridden to the same pkg.pr.new build in `pnpm-workspace.yaml`.
+- The project pins a Nitro release candidate and a ViteHub main preview, `c53605e`. `vite-hub` and every `@vite-hub/*` dependency in `package.json` use the same pkg.pr.new build. To move to another build, change the URLs and run `pnpm update vite-hub "@vite-hub/*"`.
 
 ## License
 

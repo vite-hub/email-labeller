@@ -1,5 +1,5 @@
 import { defineEventHandler } from 'h3'
-import { pollGmailChannel } from 'vite-hub/agent/channels'
+import { pollGmailChannel } from 'vite-hub/channels/adapters'
 import { gmailChannel } from '../agents/labeller'
 import { requireAdmin } from '../lib/admin'
 

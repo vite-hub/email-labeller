@@ -1,6 +1,6 @@
 import { defineEventHandler, readValidatedBody } from 'h3'
 import * as v from 'valibot'
-import { gmail, syncGmailChannel } from 'vite-hub/agent/channels'
+import { gmail, syncGmailChannel } from 'vite-hub/channels/adapters'
 import config from '../../labeller.config'
 import { requireAdmin } from '../lib/admin'
 import { gmailClient } from '../lib/gmail'

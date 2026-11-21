@@ -1,5 +1,5 @@
 import { defineEventHandler } from 'h3'
-import { gmailChannelStatus } from 'vite-hub/agent/channels'
+import { gmailChannelStatus } from 'vite-hub/channels/adapters'
 import { gmailChannel } from '../agents/labeller'
 import { isAdmin } from '../lib/admin'
 

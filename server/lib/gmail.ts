@@ -1,5 +1,5 @@
-import { useServerEnv } from '#vitehub/env/server'
-import type { GmailClient } from 'vite-hub/agent/channels'
+import { useServerEnv } from 'vite-hub/env'
+import type { GmailClient } from 'vite-hub/channels/adapters'
 import { execute } from './executor'
 
 const arrayParams = new Set(['historyTypes', 'labelIds', 'metadataHeaders'])

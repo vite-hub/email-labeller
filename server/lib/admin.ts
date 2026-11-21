@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createError, getHeader, type H3Event } from 'h3'
-import { useServerEnv } from '#vitehub/env/server'
+import { useServerEnv } from 'vite-hub/env'
 
 /** Requires `Authorization: Bearer <VITEHUB_SECRET>`. */
 export function requireAdmin(event: H3Event): void {

@@ -9,6 +9,8 @@ import { env } from 'vite-hub/env'
  * Schedules on a timer inside the process.
  */
 const host = process.env.LABELLER_HOST === 'node' ? 'node' : 'cloudflare'
+// Cloudflare settings that the build reads: `.env` locally, build variables in Workers Builds.
+const deployment = loadEnv('production', process.cwd(), '')
 
 export default defineConfig({
   plugins: [
@@ -54,8 +56,10 @@ export default defineConfig({
             agent: { providers: { state: { driver: 'libsql', url: process.env.VITEHUB_AGENT_STATE_URL || 'file:.data/agent-state.db' } } },
           }
         : {
+            // ViteHub serves the Worker on this custom domain instead of workers.dev.
+            ...deployment.CLOUDFLARE_WORKER_DOMAIN && { publicUrl: `https://${deployment.CLOUDFLARE_WORKER_DOMAIN}` },
             // ViteHub writes the `KV` binding and the Agent state Durable Object.
-            kv: { driver: 'cloudflare-kv-binding', namespaceId: loadEnv('production', process.cwd(), '').CLOUDFLARE_KV_NAMESPACE_ID },
+            kv: { driver: 'cloudflare', namespaceId: deployment.CLOUDFLARE_KV_NAMESPACE_ID },
             agent: true,
           },
     }),
