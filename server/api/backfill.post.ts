@@ -1,6 +1,6 @@
 import { defineEventHandler, readValidatedBody } from 'h3'
 import * as v from 'valibot'
-import { requireAdmin } from '../lib/admin'
+import { requireServiceToken } from 'vite-hub/env'
 import { replay } from '../lib/replay'
 
 const bodySchema = v.object({
@@ -12,7 +12,7 @@ const bodySchema = v.object({
 })
 
 export default defineEventHandler(async (event) => {
-  requireAdmin(event)
+  requireServiceToken(event, 'VITEHUB_SECRET')
   const options = await readValidatedBody(event, body => v.parse(bodySchema, body ?? {}))
   return replay(options)
 })

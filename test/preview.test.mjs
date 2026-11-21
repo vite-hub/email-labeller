@@ -161,6 +161,13 @@ test('health reads Channel state and keeps errors and message IDs private', asyn
   assert.deepEqual((await admin.json()).skipped, [])
 })
 
+test('admin routes refuse a wrong bearer token', async () => {
+  const response = await fetch(`${base}/api/sync`, { method: 'POST', headers: { authorization: 'Bearer wrong' } })
+  assert.equal(response.status, 401, logs)
+  assert.equal(response.headers.get('www-authenticate'), 'Bearer')
+  assert.equal((await response.json()).data.code, 'ENV_SERVICE_TOKEN_INVALID')
+})
+
 test('backfill applies the rule label and its trash action', async () => {
   const backfill = await api('backfill', { ids: ['bot'] })
   assert.equal(backfill.failed, 0)
